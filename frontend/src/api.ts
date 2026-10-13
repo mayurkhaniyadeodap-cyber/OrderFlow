@@ -83,6 +83,9 @@ async function toError(res: Response): Promise<ApiError> {
   return new ApiError(res.status, fallback[res.status] ?? `Request failed (${res.status}).`);
 }
 
+/** Sub-path the app is served under ("" at the site root, "/orderflow" behind a path-based proxy). */
+const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+
 async function request(path: string, init: RequestInit = {}): Promise<Response> {
   const headers = new Headers(init.headers);
   const token = tokenStore.get();
@@ -92,7 +95,7 @@ async function request(path: string, init: RequestInit = {}): Promise<Response> 
   }
   let res: Response;
   try {
-    res = await fetch(path, { ...init, headers });
+    res = await fetch(BASE + path, { ...init, headers });
   } catch {
     throw new ApiError(0, "Cannot reach the server. Check that the backend is running (start_backend.bat).");
   }

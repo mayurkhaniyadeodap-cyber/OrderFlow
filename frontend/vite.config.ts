@@ -18,7 +18,9 @@ function backendPort(): string {
 const apiTarget = process.env.ORDERFLOW_API || `http://127.0.0.1:${backendPort()}`;
 
 // The dev server proxies /api to the FastAPI backend, so the browser talks to one origin.
+// ORDERFLOW_BASE: sub-path the built app is served under on a live server (e.g. /orderflow/); default "/".
 export default defineConfig({
+  base: process.env.ORDERFLOW_BASE || "/",
   plugins: [react()],
   server: {
     host: "127.0.0.1",
