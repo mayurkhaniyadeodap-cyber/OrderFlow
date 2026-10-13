@@ -111,9 +111,9 @@ def unknown_api_route(path: str) -> JSONResponse:
 if FRONTEND_DIST.is_dir():
     @app.get("/{path:path}", include_in_schema=False)
     def spa(path: str):
-        if path.startswith("assets/"):  # missing build files are real 404s
-            return JSONResponse(status_code=404, content={"detail": "Not found"})
         candidate = (FRONTEND_DIST / path).resolve()
         if path and FRONTEND_DIST.resolve() in candidate.parents and candidate.is_file():
             return FileResponse(candidate)
+        if path.startswith("assets/"):  # missing build files are real 404s
+            return JSONResponse(status_code=404, content={"detail": "Not found"})
         return FileResponse(FRONTEND_DIST / "index.html")
