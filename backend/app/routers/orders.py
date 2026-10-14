@@ -54,7 +54,7 @@ def list_orders(
     user: User = Depends(require_viewer),
     db: Session = Depends(get_db),
 ) -> dict:
-    stmt = select(Order)
+    stmt = select(Order).where(svc.visible_to(user))
     if user.role == ROLE_PRINTING:
         stmt = stmt.where(Order.status == STATUS_LIVE, Order.is_archived.is_(False))
         sort = sort or "live_oldest"
@@ -115,12 +115,18 @@ async def upload_po(file: UploadFile = File(...), user: User = Depends(require_m
     ))).all()
     if duplicates:
         same_file = any(d.source_sha256 == digest for d in duplicates)
-        refs = ", ".join(d.internal_order_no or f"Draft #{d.id}" for d in duplicates[:5])
-        more = f" and {len(duplicates) - 5} more" if len(duplicates) > 5 else ""
+        # Name only orders this user may open; another Sales user's orders are mentioned without any details.
+        own = [d for d in duplicates if svc.can_see(d, user)]
+        refs = ", ".join(d.internal_order_no or f"Draft #{d.id}" for d in own[:5])
+        more = f" and {len(own) - 5} more" if len(own) > 5 else ""
+        others = len(duplicates) - len(own)
+        where = f"as {refs}{more}" if own else ""
+        if others:
+            where += (" and " if own else "") + f"in {others} order(s) uploaded by another user"
         reason = "The same PDF file" if same_file else f"PO {order.po_number}"
         order.extraction_warnings = [*order.extraction_warnings, {
             "field": "po_number", "level": "warning",
-            "message": f"Possible duplicate: {reason} already exists as {refs}{more}.",
+            "message": f"Possible duplicate: {reason} already exists {where}.",
         }]
     db.add(order)
     contacts.remember(db, order.executive, source="extracted", actor=user.username)

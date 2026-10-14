@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import HTTPException, UploadFile, status
-from sqlalchemy import select, update
+from sqlalchemy import ColumnElement, select, true, update
 from sqlalchemy.orm import Session
 
 from . import contacts
@@ -442,9 +442,23 @@ def change_printing_status(db: Session, order: Order, user: User, new_status: st
 
 
 # ---------------------------------------------------------------- access + serialisation
+def can_see(order: Order, user: User) -> bool:
+    """Order visibility: a Sales user sees only the orders they uploaded (`created_by`); Printing and Admin see
+    every user's orders (Printing: Live only, checked separately)."""
+    return user.role != ROLE_SALES or order.created_by == user.username
+
+
+def visible_to(user: User) -> ColumnElement[bool]:
+    """The same rule as `can_see`, as a filter for Order queries (lists, search, counts)."""
+    return Order.created_by == user.username if user.role == ROLE_SALES else true()
+
+
 def get_order_for(db: Session, order_id: int, user: User) -> Order:
     order = db.get(Order, order_id)
     if order is None or order.is_archived and user.role not in (ROLE_SALES, ROLE_ADMIN):
+        raise http_error(status.HTTP_404_NOT_FOUND, "Order not found.")
+    if not can_see(order, user):
+        # Another Sales user's order: answer exactly as if it did not exist.
         raise http_error(status.HTTP_404_NOT_FOUND, "Order not found.")
     if user.role == ROLE_PRINTING and order.status != STATUS_LIVE:
         # Drafts are not printing work items.

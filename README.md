@@ -154,6 +154,7 @@ first to `backend\backups\pre_admin_upgrade_<date>.db`.
 | Second publish | Rejected; the original internal number is returned, no new number is generated. |
 | Printing transitions | Only New → Processing → Print Done, Printing role only. Print Done is terminal. |
 | Draft visibility | Printing cannot list or open Drafts (HTTP 404). |
+| Order visibility | A Sales user sees only the orders they uploaded (lists, search, dashboard, details, files, print view; others answer HTTP 404). Printing sees every user's Live orders; Admin sees all orders. |
 | Concurrent edits | Every save/publish/status change checks the order `version`; stale writes get HTTP 409. |
 | Line values | Kept as printed/entered; mismatches with rate × qty and subtotal are flagged, not auto-corrected. |
 

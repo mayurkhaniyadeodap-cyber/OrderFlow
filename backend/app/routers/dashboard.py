@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, select
 from sqlalchemy.orm import Session, selectinload
 
 from .. import services as svc
@@ -15,7 +15,7 @@ router = APIRouter(tags=["dashboard"])
 
 @router.get("/dashboard")
 def dashboard(user: User = Depends(require_any), db: Session = Depends(get_db)) -> dict:
-    active = Order.is_archived.is_(False)
+    active = and_(Order.is_archived.is_(False), svc.visible_to(user))  # Sales: only their own orders
     by_status = dict(db.execute(select(Order.status, func.count()).where(active).group_by(Order.status)).all())
     by_printing = dict(db.execute(
         select(Order.printing_status, func.count()).where(active, Order.status == STATUS_LIVE).group_by(Order.printing_status)
