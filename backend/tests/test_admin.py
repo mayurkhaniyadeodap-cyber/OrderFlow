@@ -63,7 +63,7 @@ def test_admin_can_do_sales_actions_but_not_printing_actions(client, admin):
     sales = login(client, "sales")
     live = make_live(client, sales)
     with open(REAL_PO, "rb") as fh:
-        assert client.post("/api/orders/upload", headers=admin, files={"file": ("po.pdf", fh)}).status_code == 201
+        assert client.post("/api/orders/upload", headers=admin, data={"owner": "sales"}, files={"file": ("po.pdf", fh)}).status_code == 201
     assert client.post(f"/api/orders/{live['id']}/printing-status", headers=admin, json={"status": "Processing"}).status_code == 403
     assert client.post(f"/api/orders/{live['id']}/comment", headers=admin, json={"text": "hi"}).status_code == 201
 

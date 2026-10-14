@@ -1,14 +1,15 @@
 import { FileUp, FileText, UploadCloud } from "lucide-react";
-import { useRef, useState, type DragEvent } from "react";
+import { useEffect, useRef, useState, type DragEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import { useToast } from "../components/Toast";
 import { Alert, ErrorAlert, Section } from "../components/ui";
-import type { OrderDetail } from "../types";
+import type { AdminUser, OrderDetail } from "../types";
 
 export function UploadPage() {
-  const { config } = useAuth();
+  const { user, config } = useAuth();
+  const isAdmin = user?.role === "admin";
   const navigate = useNavigate();
   const toast = useToast();
   const input = useRef<HTMLInputElement>(null);
@@ -17,6 +18,20 @@ export function UploadPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const maxMb = config?.max_upload_mb ?? 15;
+  // Admin uploads belong to a Sales user chosen here (all active Sales users, including ones created later).
+  const [salesUsers, setSalesUsers] = useState<AdminUser[] | null>(null);
+  const [owner, setOwner] = useState("");
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    api.get<{ items: AdminUser[] }>("/api/admin/users")
+      .then((r) => setSalesUsers(r.items.filter((u) => u.role === "sales" && u.is_active)
+        .sort((a, b) => a.username.localeCompare(b.username))))
+      .catch((err) => {
+        setSalesUsers([]);
+        setError(err);
+      });
+  }, [isAdmin]);
 
   const choose = (f: File | undefined | null) => {
     setError(null);
@@ -42,13 +57,18 @@ export function UploadPage() {
 
   const upload = async () => {
     if (!file) return;
+    if (isAdmin && !owner) {
+      setError({ message: "Choose the Sales user this order belongs to." });
+      return;
+    }
     setBusy(true);
     setError(null);
     const form = new FormData();
     form.append("file", file);
+    if (isAdmin) form.append("owner", owner);
     try {
       const order = await api.upload<OrderDetail>("/api/orders/upload", form);
-      toast(`Draft created from ${file.name}`);
+      toast(`Draft created from ${file.name}${isAdmin ? ` for ${owner}` : ""}`);
       navigate(`/orders/${order.id}`);
     } catch (err) {
       setError(err);
@@ -65,6 +85,22 @@ export function UploadPage() {
         </div>
       </div>
       <Section title="Purchase order PDF" icon={<FileUp size={18} />}>
+        {isAdmin && (
+          <div className="field upload-owner">
+            <label htmlFor="upload-owner">Sales user <span className="req">*</span></label>
+            <select id="upload-owner" value={owner} onChange={(e) => setOwner(e.target.value)} required disabled={salesUsers === null}>
+              <option value="">{salesUsers === null ? "Loading Sales users…" : "Choose the Sales user this order belongs to"}</option>
+              {salesUsers?.map((u) => (
+                <option key={u.id} value={u.username}>{u.full_name ? `${u.full_name} (${u.username})` : u.username}</option>
+              ))}
+            </select>
+            <div className="field-hint">
+              {salesUsers?.length === 0
+                ? "No active Sales users. Create one in Admin → Users first."
+                : "The draft belongs to this Sales user: they see it in their account, other Sales users do not."}
+            </div>
+          </div>
+        )}
         <div
           className={`dropzone ${dragging ? "dragging" : ""} ${file ? "has-file" : ""}`}
           onDragOver={(e) => {
@@ -104,7 +140,7 @@ export function UploadPage() {
         </div>
         <ErrorAlert error={error} onClose={() => setError(null)} />
         <div className="form-actions">
-          <button className="btn btn-primary" disabled={!file || busy} onClick={upload}>
+          <button className="btn btn-primary" disabled={!file || busy || (isAdmin && !owner)} onClick={upload}>
             <FileUp size={16} /> {busy ? "Uploading and extracting…" : "Upload and extract"}
           </button>
         </div>

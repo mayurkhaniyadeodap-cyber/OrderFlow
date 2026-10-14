@@ -453,6 +453,24 @@ def visible_to(user: User) -> ColumnElement[bool]:
     return Order.created_by == user.username if user.role == ROLE_SALES else true()
 
 
+def upload_owner(db: Session, user: User, owner: str | None) -> User:
+    """Who a newly uploaded PO belongs to (`created_by`): a Sales user always owns their own uploads; an Admin
+    must choose an active Sales user, who then sees and manages the order as if they had uploaded it."""
+    from .security_seed import normalize_username
+
+    wanted = normalize_username(owner)
+    if user.role != ROLE_ADMIN:
+        if wanted and wanted != user.username:
+            raise http_error(status.HTTP_403_FORBIDDEN, "Sales users can only upload orders for themselves.")
+        return user
+    if not wanted:
+        raise http_error(status.HTTP_422_UNPROCESSABLE_CONTENT, "Choose the Sales user this order belongs to.")
+    target = db.scalar(select(User).where(User.username == wanted))
+    if target is None or target.role != ROLE_SALES or not target.is_active:
+        raise http_error(status.HTTP_422_UNPROCESSABLE_CONTENT, f"'{wanted}' is not an active Sales user.")
+    return target
+
+
 def get_order_for(db: Session, order_id: int, user: User) -> Order:
     order = db.get(Order, order_id)
     if order is None or order.is_archived and user.role not in (ROLE_SALES, ROLE_ADMIN):

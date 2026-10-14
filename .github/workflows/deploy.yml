@@ -70,9 +70,11 @@ jobs:
             3.108.50.185 ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBKXL+sfR2mmm60SkJYBVPwOty21LDXLa3JnX03XKcuuKZGgKJ4Clch1PJS2AIJ21yHkMhziZnFcxQBrjElYjZdg=
             3.108.50.185 ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQCl5r7Y40rki5o1Ez434ClZUnF52NPDCwXSEaMS44PhvdEMb2Te0thKvFYG2otDqtKv8jXCi3WyDPMidjDAlJZPDTjuiHbuuBuXVk8HW3iM9wS9jUSeNedUB/KBhrHbSK3yvmV3OlJZlI2DQtuf9FmsCa80fp6PNzecRb2/LzS7ujTSUswQeNHNAIEBbGJRZ9nR7pren1o35duhOTii5I3CG6YXR5vvC41uRc0dtnd4SzmeVGbqZOBqrApkQiYH5BZwSp9MCt8yZCevEsLwJV2v2m3PReK0NOg4CSEo2CdVi3odOeTyFyfujZbxifF3Mwrd4TEpyu58mi5bcQT7xwWmpK0gd/PinMmQh8Wj4+dkLbePR2Vo1jC7yBDdue8UTd1KmNSokdTCj6hlfI7YLSr5rR+Nhga3MXe8+0e45g+2eu5/HsXauiil9+JF24pP79Og2RGT8PholCu3NPwvci5HwF8U57F8oRwka+rXDzEt3UjRQoVgkaw8tVAnnZ1M2vU=
         run: |
+          missing=0
           for name in DEPLOY_SSH_KEY DEPLOY_HOST DEPLOY_USER; do
-            [ -n "${!name}" ] || { echo "::error::GitHub secret $name is not set"; exit 1; }
+            [ -n "${!name}" ] || { echo "::error::GitHub secret $name is not set"; missing=1; }
           done
+          [ "$missing" = 0 ] || exit 1
           install -m 700 -d ~/.ssh
           printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/orderflow_deploy
           chmod 600 ~/.ssh/orderflow_deploy

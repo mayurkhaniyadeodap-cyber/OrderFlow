@@ -341,3 +341,52 @@ describe("Login page", () => {
     expect(api.post).not.toHaveBeenCalled(); // the eye button does not sign in
   });
 });
+
+describe("Upload PO: Admin chooses the Sales user", () => {
+  const MORE_USERS: AdminUser[] = [
+    ...USERS,
+    { id: 3, username: "printing", full_name: null, role: "printing", is_active: true, created_at: "2026-10-12T07:00:00Z", updated_at: null, last_login_at: null },
+    { id: 4, username: "mohit", full_name: "Mohit Patel", role: "sales", is_active: true, created_at: "2026-10-14T07:00:00Z", updated_at: null, last_login_at: null },
+    { id: 5, username: "gone", full_name: null, role: "sales", is_active: false, created_at: "2026-10-12T07:00:00Z", updated_at: null, last_login_at: null },
+  ];
+  const pdf = () => new File(["%PDF-1.4"], "po.pdf", { type: "application/pdf" });
+
+  it("requires an active Sales user and sends it with the upload", async () => {
+    const user = userEvent.setup();
+    signIn("admin");
+    const base = api.get.getMockImplementation()!;
+    api.get.mockImplementation(async (url: string) => (url === "/api/admin/users" ? { items: MORE_USERS } : base(url)));
+    api.upload.mockResolvedValue(makeOrder({ id: 9 }));
+    renderAt("/upload");
+    const select = await screen.findByLabelText(/Sales user/);
+    await waitFor(() => expect(select).toBeEnabled());
+    const options = within(select).getAllByRole("option").map((o) => o.textContent);
+    expect(options).toEqual(["Choose the Sales user this order belongs to", "Mohit Patel (mohit)", "Demo Sales User (sales)"]);
+
+    await user.upload(document.querySelector<HTMLInputElement>('input[type="file"]')!, pdf());
+    const button = screen.getByRole("button", { name: /Upload and extract/ });
+    expect(button).toBeDisabled(); // mandatory for Admin
+    await user.selectOptions(select, "mohit");
+    expect(button).toBeEnabled();
+    await user.click(button);
+    expect(api.upload).toHaveBeenCalledTimes(1);
+    const [path, form] = api.upload.mock.calls[0] as [string, FormData];
+    expect(path).toBe("/api/orders/upload");
+    expect(form.get("owner")).toBe("mohit");
+    expect((form.get("file") as File).name).toBe("po.pdf");
+  });
+
+  it("is not shown to Sales users, whose uploads stay their own", async () => {
+    const user = userEvent.setup();
+    signIn("sales");
+    api.upload.mockResolvedValue(makeOrder({ id: 9 }));
+    renderAt("/upload");
+    expect(await screen.findByRole("heading", { name: "Upload PO" })).toBeInTheDocument();
+    expect(screen.queryByLabelText(/Sales user/)).not.toBeInTheDocument();
+    await user.upload(document.querySelector<HTMLInputElement>('input[type="file"]')!, pdf());
+    await user.click(screen.getByRole("button", { name: /Upload and extract/ }));
+    const [, form] = api.upload.mock.calls[0] as [string, FormData];
+    expect(form.get("owner")).toBeNull();
+    expect(api.get).not.toHaveBeenCalledWith("/api/admin/users");
+  });
+});

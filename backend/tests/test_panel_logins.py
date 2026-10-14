@@ -136,7 +136,7 @@ def test_role_based_access(start):
             assert c.get(path, headers=admin).status_code == 200, path
             assert c.get(path, headers=sales).status_code == 403, path
             assert c.get(path, headers=printing).status_code == 403, path
-        upload(c, admin)  # Sales and Admin manage orders, Printing does not
+        upload(c, admin, owner="sales")  # Sales and Admin manage orders, Printing does not
         live = make_live(c, sales)
         assert c.post("/api/orders/upload", headers=printing,
                       files={"file": ("po.pdf", b"%PDF-1.4", "application/pdf")}).status_code == 403

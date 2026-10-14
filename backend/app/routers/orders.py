@@ -96,7 +96,10 @@ def get_order(order_id: int, user: User = Depends(require_viewer), db: Session =
 
 # ---------------------------------------------------------------- upload + extraction (Sales)
 @router.post("/upload", status_code=status.HTTP_201_CREATED)
-async def upload_po(file: UploadFile = File(...), user: User = Depends(require_manager), db: Session = Depends(get_db)) -> dict:
+async def upload_po(file: UploadFile = File(...), owner: str | None = Form(None, max_length=64),
+                    user: User = Depends(require_manager), db: Session = Depends(get_db)) -> dict:
+    # Sales own their uploads; an Admin must choose the Sales user the order belongs to (`owner`).
+    owner_user = svc.upload_owner(db, user, owner)
     filename = svc.safe_display_name(file.filename, "purchase-order.pdf")
     data = await svc.read_upload(file)
     if not filename.lower().endswith(".pdf") or svc.detect_file_type(data, ("application/pdf",)) is None:
@@ -107,7 +110,7 @@ async def upload_po(file: UploadFile = File(...), user: User = Depends(require_m
     result = await run_in_threadpool(extract_po, settings.upload_dir / relative)
 
     order = Order(status=STATUS_DRAFT, source_filename=filename, source_pdf_path=relative, source_sha256=digest,
-                  created_by=user.username)
+                  created_by=owner_user.username)
     svc.apply_extraction(order, result)
     duplicates = db.scalars(select(Order).where(Order.is_archived.is_(False), or_(
         Order.source_sha256 == digest,
@@ -115,8 +118,8 @@ async def upload_po(file: UploadFile = File(...), user: User = Depends(require_m
     ))).all()
     if duplicates:
         same_file = any(d.source_sha256 == digest for d in duplicates)
-        # Name only orders this user may open; another Sales user's orders are mentioned without any details.
-        own = [d for d in duplicates if svc.can_see(d, user)]
+        # Name only orders the owner may open; another Sales user's orders are mentioned without any details.
+        own = [d for d in duplicates if svc.can_see(d, owner_user)]
         refs = ", ".join(d.internal_order_no or f"Draft #{d.id}" for d in own[:5])
         more = f" and {len(own) - 5} more" if len(own) > 5 else ""
         others = len(duplicates) - len(own)
@@ -130,7 +133,8 @@ async def upload_po(file: UploadFile = File(...), user: User = Depends(require_m
         }]
     db.add(order)
     contacts.remember(db, order.executive, source="extracted", actor=user.username)
-    svc.add_event(db, order, user, "pdf_uploaded", f"Uploaded {filename} ({len(data) // 1024} KB).")
+    for_owner = f" for {owner_user.username}" if owner_user is not user else ""
+    svc.add_event(db, order, user, "pdf_uploaded", f"Uploaded {filename} ({len(data) // 1024} KB){for_owner}.")
     svc.add_event(db, order, user, "extracted", order.extraction_note)
     db.commit()
     return svc.order_detail(order, user)

@@ -24,8 +24,8 @@ def archive(client, headers, order):
 
 # ---------------------------------------------------------------- Admin = Sales + more
 def test_admin_full_sales_workflow(client, admin):
-    order = upload(client, admin)  # upload
-    assert order["created_by"] == "admin" and order["permissions"]["can_edit"] and order["permissions"]["can_publish"]
+    order = upload(client, admin, owner="sales")  # upload (an Admin chooses the owning Sales user)
+    assert order["created_by"] == "sales" and order["permissions"]["can_edit"] and order["permissions"]["can_publish"]
     order = save(client, admin, order, contact="9000000001")  # Save draft
     item = {k: order["items"][0][k] for k in ITEM_KEYS if k != "id"} | {"version": order["version"], "customization_text": "LOGO"}
     r = client.put(f"/api/orders/{order['id']}/items/{order['items'][0]['id']}", headers=admin, json=item)  # Save Changes

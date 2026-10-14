@@ -122,9 +122,11 @@ def printing(client):
     return login(client, "printing")
 
 
-def upload(client: TestClient, headers: dict, path: Path = REAL_PO, name: str | None = None) -> dict:
+def upload(client: TestClient, headers: dict, path: Path = REAL_PO, name: str | None = None,
+           owner: str | None = None) -> dict:
+    """Upload a PO. An Admin must name the Sales user the order belongs to (`owner`)."""
     with open(path, "rb") as fh:
-        r = client.post("/api/orders/upload", headers=headers,
+        r = client.post("/api/orders/upload", headers=headers, data={"owner": owner} if owner else None,
                         files={"file": (name or path.name, fh, "application/pdf")})
     assert r.status_code == 201, r.text
     return r.json()
