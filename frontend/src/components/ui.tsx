@@ -1,5 +1,5 @@
-import { AlertCircle, AlertTriangle, CheckCircle2, Info, Loader2, X } from "lucide-react";
-import { useEffect, useRef, type ReactNode } from "react";
+import { AlertCircle, AlertTriangle, CheckCircle2, Eye, EyeOff, Info, Loader2, X } from "lucide-react";
+import { useEffect, useRef, useState, type InputHTMLAttributes, type ReactNode } from "react";
 import type { OrderStatus, PrintingStatus } from "../types";
 
 export function StatusPill({ status }: { status: OrderStatus | PrintingStatus | null | undefined }) {
@@ -151,6 +151,21 @@ export function KV({ label, children, wide }: { label: string; children: ReactNo
     <div className={`kv ${wide ? "kv-wide" : ""}`}>
       <div className="kv-label">{label}</div>
       <div className="kv-value">{empty ? <span className="muted">—</span> : children}</div>
+    </div>
+  );
+}
+
+/** Password input with an eye button to show/hide what was typed (hidden by default). */
+export function PasswordInput(props: Omit<InputHTMLAttributes<HTMLInputElement>, "type">) {
+  const [visible, setVisible] = useState(false);
+  const label = visible ? "Hide password" : "Show password";
+  return (
+    <div className="password-input">
+      <input {...props} type={visible ? "text" : "password"} />
+      <button type="button" className="password-toggle" onClick={() => setVisible((v) => !v)}
+              aria-label={label} title={label} aria-pressed={visible} aria-controls={props.id}>
+        {visible ? <EyeOff size={16} aria-hidden="true" /> : <Eye size={16} aria-hidden="true" />}
+      </button>
     </div>
   );
 }

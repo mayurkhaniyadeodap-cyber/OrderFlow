@@ -1,0 +1,96 @@
+# Test, build and deploy OrderFlow to the live server (care.deodap.info/orderflow) on every push to main.
+#
+# The deploy step uses a dedicated SSH key (GitHub secrets DEPLOY_SSH_KEY, DEPLOY_HOST, DEPLOY_USER) that the server only allows to run
+# /home/ubuntu/orderflow-deploy/deploy.sh. That script backs up the data and code, copies the new code without
+# touching .env, the database, uploads or backups, restarts only the "orderflow" service, checks its health and
+# rolls the code back automatically if the check fails. See deploy/orderflow-deploy.sh.
+name: Test and deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: orderflow-deploy
+  cancel-in-progress: false
+
+jobs:
+  test:
+    name: Tests and build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          cache: pip
+          cache-dependency-path: backend/requirements*.txt
+      - name: Install backend packages
+        working-directory: backend
+        run: pip install -r requirements-dev.txt
+      - name: Backend tests
+        # tests that need the private sample PO (kept out of Git) are reported as skipped
+        working-directory: backend
+        run: python -m pytest -q -rs
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install frontend packages
+        working-directory: frontend
+        run: npm ci --no-audit --no-fund
+      - name: Frontend tests
+        working-directory: frontend
+        run: npm test
+      - name: Frontend build
+        working-directory: frontend
+        run: npm run build
+
+  deploy:
+    name: Deploy to live server
+    needs: test
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy (backup, update, restart OrderFlow only, health check)
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          # The server's public SSH host keys (not secret), so the runner only talks to the real server.
+          KNOWN_HOSTS: |
+            3.108.50.185 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKH0Qt7w74waBmZo/s4hBZyYs/eJBvWKotvqRPAxh4uq
+            3.108.50.185 ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBKXL+sfR2mmm60SkJYBVPwOty21LDXLa3JnX03XKcuuKZGgKJ4Clch1PJS2AIJ21yHkMhziZnFcxQBrjElYjZdg=
+            3.108.50.185 ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQCl5r7Y40rki5o1Ez434ClZUnF52NPDCwXSEaMS44PhvdEMb2Te0thKvFYG2otDqtKv8jXCi3WyDPMidjDAlJZPDTjuiHbuuBuXVk8HW3iM9wS9jUSeNedUB/KBhrHbSK3yvmV3OlJZlI2DQtuf9FmsCa80fp6PNzecRb2/LzS7ujTSUswQeNHNAIEBbGJRZ9nR7pren1o35duhOTii5I3CG6YXR5vvC41uRc0dtnd4SzmeVGbqZOBqrApkQiYH5BZwSp9MCt8yZCevEsLwJV2v2m3PReK0NOg4CSEo2CdVi3odOeTyFyfujZbxifF3Mwrd4TEpyu58mi5bcQT7xwWmpK0gd/PinMmQh8Wj4+dkLbePR2Vo1jC7yBDdue8UTd1KmNSokdTCj6hlfI7YLSr5rR+Nhga3MXe8+0e45g+2eu5/HsXauiil9+JF24pP79Og2RGT8PholCu3NPwvci5HwF8U57F8oRwka+rXDzEt3UjRQoVgkaw8tVAnnZ1M2vU=
+        run: |
+          for name in DEPLOY_SSH_KEY DEPLOY_HOST DEPLOY_USER; do
+            [ -n "${!name}" ] || { echo "::error::GitHub secret $name is not set"; exit 1; }
+          done
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/orderflow_deploy
+          chmod 600 ~/.ssh/orderflow_deploy
+          printf '%s' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          ssh -i ~/.ssh/orderflow_deploy -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
+            "$DEPLOY_USER@$DEPLOY_HOST" "deploy $GITHUB_SHA"
+
+      - name: Verify the live website and API
+        run: |
+          health=$(curl -fsS --retry 5 --retry-delay 3 https://care.deodap.info/orderflow/api/health)
+          echo "$health"
+          [[ $health == *'"status":"ok"'* && $health == *'"database":"ok"'* ]]
+          page=$(curl -fsS https://care.deodap.info/orderflow/)
+          asset=$(grep -o '/orderflow/assets/[^"]*\.js' <<<"$page" | head -1)
+          [[ -n $asset ]]
+          curl -fsS -o /dev/null "https://care.deodap.info$asset"
+          echo "Live site OK: page, API and $asset"
+
+      - name: Remove the key from the runner
+        if: always()
+        run: rm -f ~/.ssh/orderflow_deploy

@@ -16,6 +16,7 @@ from ..database import get_db
 from ..models import RevokedToken, User
 from ..schemas import LoginRequest, LoginResponse, UserOut
 from ..security import create_access_token, hash_password, get_current_user, get_token_payload, login_throttle, verify_password
+from ..security_seed import normalize_username
 
 router = APIRouter(tags=["auth"])
 
@@ -49,7 +50,7 @@ _DUMMY_HASH = hash_password(secrets.token_hex(16))
 
 @router.post("/login", response_model=LoginResponse)
 def login(body: LoginRequest, db: Session = Depends(get_db)) -> LoginResponse:
-    username = body.username.strip().lower()
+    username = normalize_username(body.username)
     if not login_throttle.reserve(username):
         raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS,
                             detail="Too many failed sign-in attempts. Wait 5 minutes and try again.")

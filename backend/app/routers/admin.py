@@ -36,7 +36,7 @@ from ..models import (
     utcnow,
 )
 from ..security import hash_password, require_admin, validate_new_password
-from ..security_seed import USERNAME_RE
+from ..security_seed import USERNAME_RE, USERNAME_RULE, normalize_username
 
 router = APIRouter(prefix="/admin", tags=["admin"], dependencies=[Depends(require_admin)])
 # Serialises role/active changes so two concurrent requests cannot both pass the "last active Admin" check.
@@ -184,7 +184,7 @@ def _clean_name(value: Any) -> Any:
 
 
 class UserCreate(BaseModel):
-    username: str = Field(min_length=3, max_length=32)
+    username: str = Field(min_length=1, max_length=64)  # 3-32 after normalising, checked below
     full_name: str | None = Field(default=None, max_length=120)
     role: Literal["admin", "sales", "printing"]
     password: str = Field(min_length=1, max_length=200)
@@ -194,9 +194,9 @@ class UserCreate(BaseModel):
     @field_validator("username")
     @classmethod
     def _username(cls, value: str) -> str:
-        value = value.strip().lower()
+        value = normalize_username(value)
         if not USERNAME_RE.fullmatch(value):
-            raise ValueError("Use 3-32 characters: a-z, 0-9, dot, underscore or hyphen (start with a letter or digit)")
+            raise ValueError(f"Use {USERNAME_RULE}")
         return value
 
     @field_validator("password")

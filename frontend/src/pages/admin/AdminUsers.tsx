@@ -3,12 +3,14 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
 import { useToast } from "../../components/Toast";
-import { ErrorAlert, Modal, Section, Spinner } from "../../components/ui";
+import { ErrorAlert, Modal, PasswordInput, Section, Spinner } from "../../components/ui";
 import { fmtDateTime } from "../../format";
 import type { AdminUser, Role } from "../../types";
 
 const ROLE_LABEL: Record<Role, string> = { admin: "Admin", sales: "Sales", printing: "Printing" };
-const USERNAME_RE = /^[a-z0-9][a-z0-9._-]{2,31}$/;
+// Same rule as the server: stored lower-case with single spaces ("Dhruv  Bhojani " -> "dhruv bhojani").
+const USERNAME_RE = /^[a-z0-9][a-z0-9._ -]{2,31}$/;
+export const normalizeUsername = (value: string) => value.trim().split(/\s+/).join(" ").toLowerCase();
 
 /** Same rule as the server (the server re-checks everything). */
 export function passwordProblem(password: string, repeat: string): string | null {
@@ -128,9 +130,9 @@ function CreateUserDialog({ onClose, onDone }: { onClose: () => void; onDone: ()
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
-    const username = form.username.trim().toLowerCase();
+    const username = normalizeUsername(form.username);
     const problem = !USERNAME_RE.test(username)
-      ? "Username: 3-32 characters, a-z, 0-9, dot, underscore or hyphen."
+      ? "Username: 3-32 characters, letters, numbers, spaces, dot, underscore or hyphen."
       : passwordProblem(form.password, form.repeat);
     if (problem) {
       setError({ message: problem });
@@ -294,12 +296,12 @@ function PasswordFields({ value, onChange }: {
     <>
       <div className="field">
         <label htmlFor="p-new">Password</label>
-        <input id="p-new" type="password" autoComplete="new-password" value={value.password} onChange={(e) => onChange({ password: e.target.value })} required />
+        <PasswordInput id="p-new" autoComplete="new-password" value={value.password} onChange={(e) => onChange({ password: e.target.value })} required />
         <div className="field-hint">At least 8 characters, mixing letters with numbers or symbols.</div>
       </div>
       <div className="field">
         <label htmlFor="p-repeat">Repeat password</label>
-        <input id="p-repeat" type="password" autoComplete="new-password" value={value.repeat} onChange={(e) => onChange({ repeat: e.target.value })} required />
+        <PasswordInput id="p-repeat" autoComplete="new-password" value={value.repeat} onChange={(e) => onChange({ repeat: e.target.value })} required />
       </div>
     </>
   );

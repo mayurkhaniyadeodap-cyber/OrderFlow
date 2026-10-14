@@ -5,7 +5,7 @@ import pytest
 
 from app.pdf_extract import extract_po, parse_int, parse_number, parse_source_date
 
-from .conftest import ANNESHA, IMAGE_ONLY_PDF, MEET_PAPERS, REAL_PO, RIYA
+from .conftest import ANNESHA, IMAGE_ONLY_PDF, MEET_PAPERS, REAL_PO, RIYA, sample
 
 
 def fields(result, level=None):
@@ -17,7 +17,7 @@ def messages(result):
 
 
 def test_real_sample_po_order_fields():
-    r = extract_po(REAL_PO)
+    r = extract_po(sample(REAL_PO))
     assert r.layout == "selfserve"
     o = r.order
     assert o["po_number"] == "135-73530274"
@@ -39,7 +39,7 @@ def test_real_sample_po_order_fields():
 
 
 def test_real_sample_po_items():
-    items = extract_po(REAL_PO).items
+    items = extract_po(sample(REAL_PO)).items
     assert [(i["sku"], i["quantity"], i["rate"], i["value"]) for i in items] == [
         ("12939_3d_square_shape_creative_lamp", 60, 87.20, 5232.00),
         ("6462_7in1_keyboard_clean_brush", 150, 67.00, 10050.00),
@@ -53,7 +53,7 @@ def test_real_sample_po_items():
 
 
 def test_real_sample_po_flags_without_inventing():
-    r = extract_po(REAL_PO)
+    r = extract_po(sample(REAL_PO))
     assert "courier" not in r.order  # "Transport" is blank on the PDF → never guessed
     assert "courier" not in fields(r)  # courier is not used: no "assign a courier" warning
     assert not fields(r, "error")
@@ -108,7 +108,7 @@ def test_subtotal_mismatch_is_flagged_and_values_kept():
 
 
 def test_image_only_pdf_is_flagged_for_manual_entry():
-    r = extract_po(IMAGE_ONLY_PDF)
+    r = extract_po(sample(IMAGE_ONLY_PDF))
     assert r.order == {} and r.items == []
     assert r.warnings[0]["level"] == "error" and "OCR" in r.warnings[0]["message"]
 

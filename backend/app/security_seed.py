@@ -16,7 +16,14 @@ from sqlalchemy.orm import Session
 from .models import ROLE_ADMIN, ROLE_PRINTING, ROLE_SALES, User
 from .security import hash_password
 
-USERNAME_RE = re.compile(r"[a-z0-9][a-z0-9._-]{2,31}")
+# Usernames are stored normalised (see normalize_username): lower-case, single spaces, no leading/trailing spaces.
+USERNAME_RE = re.compile(r"[a-z0-9][a-z0-9._ -]{2,31}")
+USERNAME_RULE = "3-32 characters: letters a-z, numbers, spaces, dot, underscore or hyphen (start with a letter or number)"
+
+
+def normalize_username(value: str | None) -> str:
+    """The one form a username is stored and looked up in: 'Dhruv  Bhojani ' -> 'dhruv bhojani'."""
+    return " ".join((value or "").split()).lower()
 
 # role, label, environment prefix (<PREFIX>_USERNAME / <PREFIX>_PASSWORD), full name of a new account
 ENV_ACCOUNTS = [
@@ -46,7 +53,7 @@ def _bootstrap(db: Session, role: str, label: str, prefix: str, full_name: str,
     from .security import validate_new_password
 
     variables = f"{prefix}_USERNAME/{prefix}_PASSWORD"
-    username = (username or "").strip().lower()
+    username = normalize_username(username)
     if not username or not password:
         return f"{SKIPPED}{variables} not set"
     if db.scalar(select(func.count(User.id)).where(User.role == role)):
@@ -54,7 +61,7 @@ def _bootstrap(db: Session, role: str, label: str, prefix: str, full_name: str,
         return (f"{SKIPPED}{article} {label} account already exists; {variables} are only used to create the first one "
                 f"(change passwords in Admin -> Users)")
     if not USERNAME_RE.fullmatch(username):
-        return f"{prefix}_USERNAME is not a valid username (3-32 of a-z, 0-9, . _ -); no {label} account created"
+        return f"{prefix}_USERNAME is not a valid username ({USERNAME_RULE}); no {label} account created"
     if db.scalar(select(User).where(User.username == username)):
         return f"user '{username}' already exists with another role; no {label} account created"
     try:

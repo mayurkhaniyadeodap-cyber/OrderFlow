@@ -27,7 +27,7 @@ from .config import settings
 from .database import SessionLocal, configure_database
 from .models import ROLE_ADMIN, ROLES, User, utcnow
 from .security import hash_password, validate_new_password
-from .security_seed import USERNAME_RE
+from .security_seed import USERNAME_RE, USERNAME_RULE, normalize_username
 
 
 def _ask_password() -> str:
@@ -117,7 +117,7 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"{u.username:<20} {u.role:<10} {'active' if u.is_active else 'inactive'}")
             return 0
 
-        username = args.username.strip().lower()
+        username = normalize_username(args.username)
         user = db.scalar(select(User).where(User.username == username))
         if args.cmd in ("create-user", "create-admin"):
             role = ROLE_ADMIN if args.cmd == "create-admin" else args.role
@@ -125,7 +125,7 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"User '{username}' already exists.")
                 return 1
             if not USERNAME_RE.fullmatch(username):
-                print("Username must be 3-32 characters: a-z, 0-9, dot, underscore or hyphen.")
+                print(f"Username must be {USERNAME_RULE}.")
                 return 1
             db.add(User(username=username, full_name=args.name, role=role, password_hash=hash_password(_ask_password())))
             audit.record(db, "command-line", "user_created", username, f"Created with role {role} from the command line.")
@@ -154,9 +154,9 @@ def main(argv: list[str] | None = None) -> int:
 def _cmd_set_admin_credentials(args) -> int:
     from . import backup
 
-    username = args.username.strip().lower()
+    username = normalize_username(args.username)
     if not USERNAME_RE.fullmatch(username):
-        print("Username must be 3-32 characters: a-z, 0-9, dot, underscore or hyphen.")
+        print(f"Username must be {USERNAME_RULE}.")
         return 1
     try:
         password = _read_password(args.password_stdin)

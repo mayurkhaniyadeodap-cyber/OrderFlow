@@ -9,7 +9,7 @@ import pytest
 from app.database import SessionLocal
 from app.models import Order, OrderEvent
 
-from .conftest import ADMIN_PASSWORD, ANNESHA, MEET_PAPERS, REAL_PO, login, make_live, make_user, upload
+from .conftest import ADMIN_PASSWORD, ANNESHA, MEET_PAPERS, REAL_PO, RIYA, login, make_live, make_user, upload
 
 
 @pytest.fixture()
@@ -163,3 +163,41 @@ def test_duplicate_warning_does_not_reveal_another_users_order(client, world):
     again = upload(client, world["b"], REAL_PO)
     [warning] = [w for w in again["extraction_warnings"] if w["message"].startswith("Possible duplicate")]
     assert f"Draft #{dup['id']}" in warning["message"] and "another user" in warning["message"]
+
+
+def test_new_sales_users_created_by_admin_are_restricted_automatically(client, world):
+    """Sales users the Admin creates later (e.g. Mohit and Dhruv) only see their own orders, like everyone else."""
+    accounts = {}
+    for username in ("Mohit", "Dhruv Bhojani"):
+        r = client.post("/api/admin/users", headers=world["admin"],
+                        json={"username": username, "role": "sales", "password": "New-Sales-Pass-1"})
+        assert r.status_code == 201, r.text
+        token = client.post("/api/login", json={"username": username, "password": "New-Sales-Pass-1"}).json()["access_token"]
+        accounts[username] = {"Authorization": f"Bearer {token}"}
+    mohit, dhruv = accounts["Mohit"], accounts["Dhruv Bhojani"]
+    mohit_draft, mohit_live = upload(client, mohit, RIYA), make_live(client, mohit, ANNESHA)
+    dhruv_draft, dhruv_live = upload(client, dhruv, MEET_PAPERS), make_live(client, dhruv, MEET_PAPERS)
+    assert mohit_draft["created_by"] == "mohit" and dhruv_draft["created_by"] == "dhruv bhojani"
+
+    mohit_ids, dhruv_ids = {mohit_draft["id"], mohit_live["id"]}, {dhruv_draft["id"], dhruv_live["id"]}
+    assert ids(client, mohit, include_archived=True) == mohit_ids
+    assert ids(client, dhruv, include_archived=True) == dhruv_ids
+    assert dashboard(client, mohit)["counts"]["total"] == 2 and dashboard(client, dhruv)["counts"]["total"] == 2
+    assert not ids(client, mohit, q=dhruv_live["po_number"]) & dhruv_ids  # search does not reach Dhruv's orders
+
+    # every order route, both directions, by direct id
+    for caller, others in ((mohit, (dhruv_draft, dhruv_live)), (dhruv, (mohit_draft, mohit_live))):
+        for order in others:
+            for method, url, kwargs in foreign_requests(order):
+                assert getattr(client, method)(url, headers=caller, **kwargs).status_code == 404, (method, url)
+
+    # the existing Sales users do not see the new users' orders, and vice versa
+    assert not ids(client, world["a"]) & (mohit_ids | dhruv_ids)
+    assert not ids(client, mohit) & {world["a_draft"]["id"], world["a_live"]["id"]}
+
+    # Admin still sees and opens everything; Printing sees every Live order
+    every = mohit_ids | dhruv_ids | {world[k]["id"] for k in ("a_draft", "a_live", "b_draft", "b_live")}
+    assert ids(client, world["admin"]) == every
+    for oid in every:
+        assert client.get(f"/api/orders/{oid}", headers=world["admin"]).status_code == 200
+    assert {mohit_live["id"], dhruv_live["id"]} <= ids(client, world["printing"])

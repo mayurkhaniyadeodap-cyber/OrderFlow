@@ -162,3 +162,38 @@ hand when they are safely stored elsewhere.
 * `vite`, `vitest`, `esbuild` advisories affect development tools only; they are not part of the built app and never
   run on the live server.
 * Old `orders.courier` database column: kept intentionally (unused) so no order data had to be rewritten.
+
+## 11. Automatic deployment (live server: care.deodap.info/orderflow)
+
+Every push to `main` on GitHub runs [.github/workflows/deploy.yml](.github/workflows/deploy.yml):
+
+1. **Tests and build** on GitHub: backend tests, frontend tests, production build. Tests that need the private
+   sample PO (kept out of Git) are reported as *skipped* there — run `run_tests.bat` on your PC before pushing.
+2. **Deploy** (only if step 1 passed): GitHub connects with its own SSH key and runs
+   `/home/ubuntu/orderflow-deploy/deploy.sh deploy <commit>` on the server. The script
+   ([deploy/orderflow-deploy.sh](deploy/orderflow-deploy.sh)):
+   * accepts only commits that are on GitHub `main`, downloads them and builds the web app for `/orderflow/`;
+   * creates a data backup ZIP (`backend/backups/`) and a code snapshot (`~/orderflow-deploy/code-backups/`);
+   * copies the new code into `/var/www/orderflow` — never `.env`, the database, `uploads`, `backups` or `.venv`,
+     and never deletes files; installs Python packages only when `requirements.txt` changed;
+   * restarts only `orderflow.service` (a few seconds) and checks the API, database and web page;
+     **if the check fails the previous code is restored automatically** and the GitHub run turns red.
+3. **Verify**: GitHub checks https://care.deodap.info/orderflow/ and its API from outside.
+
+Server layout (`/home/ubuntu/orderflow-deploy/`): `deploy.sh` (installed by hand; pushes to GitHub cannot change
+it), `repo.git` (cached copy of GitHub), `stage/` (build area), `code-backups/`, `deploy.log`, `deployed-commit`.
+
+**The GitHub key can only run that script.** It is one line in `~/.ssh/authorized_keys` starting with
+`restrict,command="/home/ubuntu/orderflow-deploy/deploy.sh"` (no shell, no file transfer, no port forwarding).
+GitHub secrets: `DEPLOY_SSH_KEY` (its private key), `DEPLOY_HOST` (3.108.50.185), `DEPLOY_USER` (ubuntu). The server's public host keys are in the workflow file.
+
+**Rollback**
+
+* Code, fastest: `ssh -i <deploy key> ubuntu@3.108.50.185 rollback` restores the code snapshot taken before the
+  last deploy and restarts OrderFlow. Lasting fix: revert the bad commit and push (deploys the reverted code).
+* Data: restore the pre-deploy ZIP from `backend/backups/` as in section 8 (stop `orderflow` first:
+  `sudo systemctl stop orderflow`).
+* Status: `ssh -i <deploy key> ubuntu@3.108.50.185 status`.
+
+**Stop automatic deployment:** GitHub → Actions → *Test and deploy* → *Disable workflow*, or delete the
+`github-actions-orderflow-deploy` line from `~/.ssh/authorized_keys` on the server.

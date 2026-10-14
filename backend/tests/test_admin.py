@@ -141,7 +141,8 @@ def test_create_edit_and_list_users(client, admin):
 @pytest.mark.parametrize("body,code", [
     ({"username": "sales", "role": "sales", "password": "Strong-Pass-1"}, 409),      # duplicate
     ({"username": "ab", "role": "sales", "password": "Strong-Pass-1"}, 422),         # too short
-    ({"username": "bad name", "role": "sales", "password": "Strong-Pass-1"}, 422),   # invalid chars
+    ({"username": "bad/name", "role": "sales", "password": "Strong-Pass-1"}, 422),   # invalid chars
+    ({"username": " SALES ", "role": "sales", "password": "Strong-Pass-1"}, 409),    # same name after normalising
     ({"username": "newuser", "role": "manager", "password": "Strong-Pass-1"}, 422),  # unknown role
     ({"username": "newuser", "role": "sales", "password": "short1"}, 422),           # weak password
     ({"username": "newuser", "role": "sales", "password": "onlyletters"}, 422),

@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { routes } from "../../App";
 import { makeOrder } from "../../test/fixtures";
 import type { AdminUser, Role } from "../../types";
-import { passwordProblem } from "./AdminUsers";
+import { normalizeUsername, passwordProblem } from "./AdminUsers";
 
 const api = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), put: vi.fn(), patch: vi.fn(), del: vi.fn(), upload: vi.fn(), blob: vi.fn() }));
 vi.mock("../../api", async (importOriginal) => ({ ...(await importOriginal<typeof import("../../api")>()), api }));
@@ -130,6 +130,62 @@ describe("User management", () => {
     await user.click(dialog.getByRole("button", { name: "Create user" }));
     expect(api.post).toHaveBeenCalledWith("/api/admin/users", { username: "priya.s", full_name: null, role: "printing", password: "Priya-Pass-1" });
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  });
+
+  it("accepts a username with spaces and still rejects invalid characters", async () => {
+    const user = userEvent.setup();
+    signIn("admin");
+    api.post.mockResolvedValue({ ...USERS[1], id: 5, username: "dhruv bhojani" });
+    renderAt("/admin/users");
+    await user.click(await screen.findByRole("button", { name: /New user/ }));
+    const dialog = within(screen.getByRole("dialog", { name: "New user" }));
+    await user.type(dialog.getByLabelText("Username"), "Dhruv/Bhojani");
+    await user.type(dialog.getByLabelText("Password"), "Dhruv-Pass-1");
+    await user.type(dialog.getByLabelText("Repeat password"), "Dhruv-Pass-1");
+    await user.click(dialog.getByRole("button", { name: "Create user" }));
+    expect(dialog.getByText(/Username: 3-32 characters/)).toBeInTheDocument();
+    expect(api.post).not.toHaveBeenCalled();
+
+    await user.clear(dialog.getByLabelText("Username"));
+    await user.type(dialog.getByLabelText("Username"), "  Dhruv  Bhojani ");
+    await user.click(dialog.getByRole("button", { name: "Create user" }));
+    expect(api.post).toHaveBeenCalledWith("/api/admin/users", { username: "dhruv bhojani", full_name: null, role: "sales", password: "Dhruv-Pass-1" });
+    expect(normalizeUsername("Dhruv Bhojani")).toBe("dhruv bhojani");
+  });
+
+  it("shows and hides each new-user password independently, by mouse and keyboard", async () => {
+    const user = userEvent.setup();
+    signIn("admin");
+    renderAt("/admin/users");
+    await user.click(await screen.findByRole("button", { name: /New user/ }));
+    const dialog = within(screen.getByRole("dialog", { name: "New user" }));
+    const password = dialog.getByLabelText("Password");
+    const repeat = dialog.getByLabelText("Repeat password");
+    await user.type(password, "Priya-Pass-1");
+    await user.type(repeat, "Priya-Pass-1");
+    expect(password).toHaveAttribute("type", "password"); // hidden by default
+    expect(repeat).toHaveAttribute("type", "password");
+    const [showPassword, showRepeat] = dialog.getAllByRole("button", { name: "Show password" });
+
+    await user.click(showPassword);
+    expect(password).toHaveAttribute("type", "text");
+    expect(repeat).toHaveAttribute("type", "password"); // independent
+    expect(showPassword).toHaveAccessibleName("Hide password");
+    expect(showPassword).toHaveAttribute("aria-pressed", "true");
+    await user.click(showPassword);
+    expect(password).toHaveAttribute("type", "password");
+
+    await user.click(repeat);
+    await user.tab(); // the eye button is reachable with the keyboard
+    expect(showRepeat).toHaveFocus();
+    await user.keyboard("{Enter}");
+    expect(repeat).toHaveAttribute("type", "text");
+    await user.keyboard(" ");
+    expect(repeat).toHaveAttribute("type", "password");
+
+    expect(password).toHaveValue("Priya-Pass-1"); // values kept; toggling never submits the form
+    expect(repeat).toHaveValue("Priya-Pass-1");
+    expect(api.post).not.toHaveBeenCalled();
   });
 
   it("cannot deactivate yourself; deactivating someone else asks first", async () => {
@@ -267,5 +323,21 @@ describe("passwordProblem", () => {
     expect(passwordProblem("12345678", "12345678")).toMatch(/mix letters/);
     expect(passwordProblem("Good-Pass-1", "Good-Pass-2")).toMatch(/do not match/);
     expect(passwordProblem("Good-Pass-1", "Good-Pass-1")).toBeNull();
+  });
+});
+
+describe("Login page", () => {
+  it("hides the password by default and shows it with the eye button", async () => {
+    const user = userEvent.setup();
+    renderAt("/login");
+    const password = await screen.findByLabelText("Password");
+    await user.type(password, "Secret-Pass-1");
+    expect(password).toHaveAttribute("type", "password");
+    await user.click(screen.getByRole("button", { name: "Show password" }));
+    expect(password).toHaveAttribute("type", "text");
+    expect(password).toHaveValue("Secret-Pass-1");
+    await user.click(screen.getByRole("button", { name: "Hide password" }));
+    expect(password).toHaveAttribute("type", "password");
+    expect(api.post).not.toHaveBeenCalled(); // the eye button does not sign in
   });
 });

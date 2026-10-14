@@ -2,7 +2,7 @@ import { LogIn } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "../auth";
-import { Alert, ErrorAlert } from "../components/ui";
+import { Alert, ErrorAlert, PasswordInput } from "../components/ui";
 import type { Role } from "../types";
 
 const SALES_ONLY = /^\/(orders\/?(\?.*)?$|upload)/;
@@ -76,9 +76,8 @@ export function LoginPage() {
           </div>
           <div className="field">
             <label htmlFor="password">Password</label>
-            <input
+            <PasswordInput
               id="password"
-              type="password"
               autoComplete="current-password"
               required
               value={password}

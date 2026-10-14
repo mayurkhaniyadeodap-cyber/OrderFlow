@@ -19,6 +19,40 @@ LOGO_JPEG = FIXTURES / "samples" / "logo_khodiyar.jpeg"
 MEET_PAPERS = FIXTURES / "layouts" / "meet_papers_draft.pdf"
 ANNESHA = FIXTURES / "layouts" / "annesha_new_status_box.pdf"
 RIYA = FIXTURES / "layouts" / "riya_marketing_processing.pdf"
+SAMPLES = FIXTURES / "samples"
+
+
+# The real sample PO (customer data) is kept out of Git, so a fresh checkout such as GitHub Actions does not have it.
+# Tests that need a missing sample file are reported as skipped there; on a PC with the samples they all run.
+def _skip_if_sample_missing(exc: FileNotFoundError) -> None:
+    missing = Path(str(exc.filename or ""))
+    if SAMPLES.resolve() in missing.resolve().parents:
+        pytest.skip(f"private sample file not available: {missing.name} (kept out of Git)")
+
+
+def sample(path: Path) -> Path:
+    """A private sample file, for code that turns a missing file into a result instead of an error."""
+    if not path.exists():
+        pytest.skip(f"private sample file not available: {path.name} (kept out of Git)")
+    return path
+
+
+@pytest.hookimpl(wrapper=True)
+def pytest_runtest_setup(item):
+    try:
+        return (yield)
+    except FileNotFoundError as exc:
+        _skip_if_sample_missing(exc)
+        raise
+
+
+@pytest.hookimpl(wrapper=True)
+def pytest_runtest_call(item):
+    try:
+        return (yield)
+    except FileNotFoundError as exc:
+        _skip_if_sample_missing(exc)
+        raise
 
 
 # Test-only passwords (never the real ones from backend/.env). Sales and Printing accounts are created from these

@@ -204,6 +204,14 @@ input:not([type=checkbox]):not([type=radio]), select, textarea {
 }
 textarea { resize: vertical; }
 input:focus, select:focus, textarea:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-50); }
+.password-input { position: relative; }
+.password-input input:not([type=checkbox]):not([type=radio]) { padding-right: 38px; }
+.password-toggle {
+  position: absolute; top: 50%; right: 4px; transform: translateY(-50%); display: flex; align-items: center;
+  padding: 6px; border: 0; border-radius: 5px; background: transparent; color: var(--muted); cursor: pointer;
+}
+.password-toggle:hover { color: var(--text); background: var(--surface-2); }
+.password-toggle:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
 .has-error input, .has-error textarea, .has-error select { border-color: var(--danger); }
 .has-flag input, .has-flag textarea { border-color: #f59e0b; background: #fffdf5; }
 .field-error { color: var(--danger); font-size: 12px; font-weight: 500; }
