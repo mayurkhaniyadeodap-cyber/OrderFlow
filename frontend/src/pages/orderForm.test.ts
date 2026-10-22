@@ -5,6 +5,7 @@ import {
   globalToPayload,
   isGlobalDirty,
   isItemDirty,
+  itemChecks,
   itemToPayload,
   keepItemKeys,
   mergeSavedGlobal,
@@ -26,6 +27,14 @@ describe("itemToPayload", () => {
     const item = { ...blankItem(), quantity: "1.5", rate: "abc", value: "-3" };
     const { errors } = itemToPayload(item, 2);
     expect(errors).toEqual({ "items.2.quantity": "Whole number", "items.2.rate": "Number", "items.2.value": "Number" });
+  });
+
+  it("sends the printing price and totals it per row", () => {
+    const item = { ...toForm(makeOrder()).items[0], quantity: "60", printing_price: "₹ 2.5" };
+    expect(itemToPayload(item, 0).payload).toMatchObject({ printing_price: 2.5 });
+    expect(itemChecks(item).printingTotal).toBe(150);
+    expect(itemChecks({ ...item, printing_price: "" }).printingTotal).toBeNull();
+    expect(itemToPayload({ ...item, printing_price: "x" }, 1).errors).toEqual({ "items.1.printing_price": "Number" });
   });
 });
 

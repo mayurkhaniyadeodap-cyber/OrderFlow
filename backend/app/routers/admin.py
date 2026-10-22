@@ -46,14 +46,15 @@ ORDER_EVENT_LABELS = {
     "pdf_uploaded": "Created (PDF uploaded)", "extracted": "Data extracted", "re_extracted": "Re-extracted",
     "draft_saved": "Draft saved", "item_saved": "Product saved", "global_saved": "Global customization saved",
     "logo_uploaded": "Logo added", "logo_removed": "Logo removed", "published": "Published Live",
-    "printing_status_changed": "Printing status changed", "photo_uploaded": "Photo uploaded",
+    "printing_status_changed": "Printing status changed", "photo_uploaded": "Preview photo uploaded",
+    "photos_confirmed": "Preview confirmed", "photos_rejected": "Preview rejected",
     "comment": "Comment", "archived": "Deleted (archived)", "restored": "Restored", "live_edited": "Live order edited",
 }
 ADMIN_EVENT_LABELS = {
     "login": "Signed in", "login_failed": "Sign-in failed", "user_created": "User created",
     "user_updated": "User updated", "password_reset": "Password reset", "settings_updated": "Settings changed",
     "backup_created": "Backup created", "backup_downloaded": "Backup downloaded",
-    "contact_created": "Contact added", "contact_updated": "Contact renamed", "contact_deleted": "Contact deleted",
+    "contact_created": "Contact added", "contact_updated": "Contact updated", "contact_deleted": "Contact deleted",
     "contacts_backfilled": "Contacts imported from orders",
 }
 
@@ -457,6 +458,8 @@ def download_backup(name: str, admin: User = Depends(require_admin), db: Session
 # ---------------------------------------------------------------- executive / sales contacts
 class ContactIn(BaseModel):
     name: str = Field(min_length=1, max_length=contacts.MAX_NAME)
+    # Omitted: taken from a number printed in the name (new contacts) or left unchanged (edits). Blank clears it.
+    mobile: str | None = Field(default=None, max_length=40)
 
     @field_validator("name")
     @classmethod
@@ -466,9 +469,14 @@ class ContactIn(BaseModel):
             raise ValueError("Enter a name")
         return value
 
+    @field_validator("mobile")
+    @classmethod
+    def _mobile(cls, value: str | None) -> str | None:
+        return contacts.clean_mobile(value)
+
 
 def _contact_out(c: SalesContact, usage: dict[str, int]) -> dict:
-    return {"id": c.id, "name": c.name, "source": c.source, "created_by": c.created_by,
+    return {"id": c.id, "name": c.name, "mobile": c.mobile, "source": c.source, "created_by": c.created_by,
             "created_at": _iso(c.created_at), "updated_at": _iso(c.updated_at), "orders": usage.get(c.name_key, 0)}
 
 
@@ -502,7 +510,9 @@ def create_contact(body: ContactIn, admin: User = Depends(require_admin), db: Se
     if existing is not None:
         raise svc.http_error(status.HTTP_409_CONFLICT, f"'{existing.name}' already exists.")
     contact = contacts.remember(db, body.name, source="admin", actor=admin.username)
-    audit.record(db, admin, "contact_created", contact.name)
+    if "mobile" in body.model_fields_set:
+        contact.mobile = body.mobile
+    audit.record(db, admin, "contact_created", contact.name, f"Mobile: {contact.mobile}" if contact.mobile else None)
     db.commit()
     return _contact_out(contact, _contact_usage(db))
 
@@ -513,10 +523,16 @@ def update_contact(contact_id: int, body: ContactIn, admin: User = Depends(requi
     clash = contacts.find(db, body.name)
     if clash is not None and clash.id != contact.id:
         raise svc.http_error(status.HTTP_409_CONFLICT, f"'{clash.name}' already exists.")
+    changes: list[str] = []
     if body.name != contact.name:
-        old = contact.name
-        contact.name, contact.name_key, contact.updated_at = body.name, contacts.name_key(body.name), utcnow()
-        audit.record(db, admin, "contact_updated", contact.name, f"{old} → {contact.name} (orders are not changed)")
+        changes.append(f"{contact.name} → {body.name} (orders are not changed)")
+        contact.name, contact.name_key = body.name, contacts.name_key(body.name)
+    if "mobile" in body.model_fields_set and body.mobile != contact.mobile:
+        changes.append(f"mobile: {contact.mobile or '—'} → {body.mobile or '—'}")
+        contact.mobile = body.mobile
+    if changes:
+        contact.updated_at = utcnow()
+        audit.record(db, admin, "contact_updated", contact.name, "; ".join(changes))
         db.commit()
     return _contact_out(contact, _contact_usage(db))
 
@@ -546,3 +562,47 @@ def contact_orders(contact_id: int, db: Session = Depends(get_db)) -> dict:
         "total": len(linked),
         "items": [svc.order_summary(o) | {"source_order_date": o.source_order_date, "executive": o.executive} for o in linked],
     }
+
+
+# ---------------------------------------------------------------- print preview reviews (per product)
+PHOTO_FILTERS = ("Pending", "Confirmed", "Rejected", "Missing")
+
+
+@router.get("/photo-reviews")
+def photo_reviews(
+    status_filter: Literal["Pending", "Confirmed", "Rejected", "Missing"] | None = Query(None, alias="status"),
+    q: str | None = Query(None, max_length=100),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Every product row of the Live orders with its print preview review status. "Missing" = no preview
+    uploaded yet. Read-only."""
+    orders = db.scalars(
+        select(Order).where(Order.status == STATUS_LIVE, Order.is_archived.is_(False))
+        .options(selectinload(Order.items), selectinload(Order.photos))
+        .order_by(Order.live_at.desc(), Order.id.desc())
+    ).all()
+    needle = (q or "").strip().casefold()
+    counts = dict.fromkeys(PHOTO_FILTERS, 0)
+    rows: list[dict] = []
+    for order in orders:
+        for item in order.items:
+            photos = [p for p in order.photos if p.item_id == item.id]
+            state = item.photo_status or "Missing"
+            haystack = " ".join(filter(None, (order.internal_order_no, order.po_number, order.customer_name,
+                                              order.executive, item.sku))).casefold()
+            if needle and needle not in haystack:
+                continue
+            counts[state] = counts.get(state, 0) + 1
+            if status_filter and state != status_filter:
+                continue
+            rows.append({
+                "order_id": order.id, "internal_order_no": order.internal_order_no, "po_number": order.po_number,
+                "customer_name": order.customer_name, "executive": order.executive, "sales_user": order.created_by,
+                "printing_status": order.printing_status, "live_at": _iso(order.live_at),
+                "item_id": item.id, "position": item.position, "sku": item.sku, "quantity": item.quantity,
+                "photo_status": item.photo_status, "photo_count": len(photos),
+                "last_photo_at": _iso(max((p.uploaded_at for p in photos), default=None)),
+                "photo_reviewed_by": item.photo_reviewed_by, "photo_reviewed_at": _iso(item.photo_reviewed_at),
+                "photo_review_note": item.photo_review_note,
+            })
+    return {"counts": counts, "total": len(rows), "items": rows}

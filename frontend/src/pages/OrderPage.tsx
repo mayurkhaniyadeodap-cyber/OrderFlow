@@ -8,6 +8,8 @@ import type { OrderDetail } from "../types";
 import { OrderEditor } from "./OrderEditor";
 import { OrderView } from "./OrderView";
 
+const AUTO_REFRESH_MS = 10_000;
+
 /** Loads an order and shows the Draft editor (Sales) or the read-only view (Live / Printing). */
 export function OrderPage() {
   const { id } = useParams();
@@ -26,6 +28,31 @@ export function OrderPage() {
       cancelled = true;
     };
   }, [id, refreshKey]);
+
+  // Live orders shown read-only update themselves, so a preview photo uploaded by Printing appears for Sales,
+  // and Sales' confirm / reject appears for Printing, without pressing Refresh. Editors are never refreshed
+  // in the background (that would replace unsaved typing).
+  const autoRefresh = Boolean(order && order.status === "Live" && !order.permissions.can_edit && !order.is_archived);
+  useEffect(() => {
+    if (!autoRefresh) return;
+    let cancelled = false;
+    const reload = () => {
+      if (document.hidden) return;
+      api
+        .get<OrderDetail>(`/api/orders/${id}`)
+        .then((o) => !cancelled && setOrder(o))
+        .catch(() => undefined); // keep showing the last loaded order; the next try may succeed
+    };
+    const timer = window.setInterval(reload, AUTO_REFRESH_MS);
+    window.addEventListener("focus", reload);
+    document.addEventListener("visibilitychange", reload);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+      window.removeEventListener("focus", reload);
+      document.removeEventListener("visibilitychange", reload);
+    };
+  }, [autoRefresh, id]);
 
   const back = user?.role === "admin" ? "/admin/orders" : user?.role === "printing" ? "/queue" : "/orders";
   if (error instanceof ApiError && error.status === 404) {

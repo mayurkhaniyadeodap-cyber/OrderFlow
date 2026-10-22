@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import re
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -59,6 +59,7 @@ class ItemIn(BaseModel):
     rate: float | None = Field(default=None, ge=0, le=100_000_000)
     original_rate: float | None = Field(default=None, ge=0, le=100_000_000)
     value: float | None = Field(default=None, ge=0, le=1_000_000_000)
+    printing_price: float | None = Field(default=None, ge=0, le=100_000_000)
     weight: str | None = Field(default=None, max_length=100)
     hsn: str | None = Field(default=None, max_length=32)
     tax: str | None = Field(default=None, max_length=32)
@@ -75,7 +76,7 @@ class ItemIn(BaseModel):
 
     _names = field_validator("customization_names", mode="before")(_clean_names)
 
-    @field_validator("rate", "original_rate", "value")
+    @field_validator("rate", "original_rate", "value", "printing_price")
     @classmethod
     def _money(cls, value: float | None) -> float | None:
         return None if value is None else round(value, 2)
@@ -178,3 +179,13 @@ class CommentRequest(BaseModel):
 
 class PrintingStatusRequest(BaseModel):
     status: str
+
+
+class PhotoReviewRequest(BaseModel):
+    """Sales confirms the post-print photos, or rejects them with a reason (Printing then uploads again)."""
+
+    version: int
+    action: Literal["confirm", "reject"]
+    note: str | None = Field(default=None, max_length=MAX_TEXT)
+
+    _clean_note = field_validator("note", mode="before")(_clean)

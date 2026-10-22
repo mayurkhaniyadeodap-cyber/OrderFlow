@@ -4,11 +4,15 @@ from __future__ import annotations
 
 import pytest
 
-from .conftest import ITEM_KEYS, LOGO_JPEG, MEET_PAPERS, REAL_PO, login, make_live, payload, publish, save, upload
+from .conftest import (
+    ITEM_KEYS, LOGO_JPEG, MEET_PAPERS, REAL_PO, approve_previews, login, make_live, payload, publish, save, upload,
+)
 
 
 def advance(client, printing, order, *statuses):
     for s in statuses:
+        if s == "Print Done":
+            approve_previews(client, order)  # Sales must confirm every product preview first
         r = client.post(f"/api/orders/{order['id']}/printing-status", headers=printing, json={"status": s})
         assert r.status_code == 200, r.text
     return r.json()

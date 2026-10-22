@@ -1,4 +1,4 @@
-import { AlertTriangle, ChevronRight, Sparkles } from "lucide-react";
+import { AlertTriangle, Camera, ChevronRight, Sparkles } from "lucide-react";
 import { Link } from "react-router-dom";
 import { fmtDateTime, fmtMoney } from "../format";
 import type { OrderSummary, Role } from "../types";
@@ -45,6 +45,20 @@ export function OrdersTable({ orders, role }: { orders: OrderSummary[]; role: Ro
                         <Sparkles size={12} /> No customization
                       </span>
                     )}
+                  </div>
+                )}
+                {sales && o.photo_status === "Pending" && (
+                  <div className="cell-flags">
+                    <span className="flag flag-warn" title="Printing uploaded a print preview: confirm or reject it">
+                      <Camera size={12} /> Preview to confirm
+                    </span>
+                  </div>
+                )}
+                {!sales && o.photo_status === "Rejected" && (
+                  <div className="cell-flags">
+                    <span className="flag flag-warn" title="Sales rejected a print preview: upload a new one">
+                      <Camera size={12} /> Preview rejected
+                    </span>
                   </div>
                 )}
               </td>

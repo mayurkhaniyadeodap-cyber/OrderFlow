@@ -34,6 +34,12 @@ PRINT_PROCESSING = "Processing"
 PRINT_DONE = "Print Done"
 PRINTING_FLOW = (PRINT_NEW, PRINT_PROCESSING, PRINT_DONE)
 
+# Sales review of the print preview photos, per product row (null until Printing uploads a preview for that row).
+# Printing cannot mark an order Print Done until every product's preview is Confirmed.
+PHOTO_PENDING = "Pending"
+PHOTO_CONFIRMED = "Confirmed"
+PHOTO_REJECTED = "Rejected"
+
 
 def utcnow() -> datetime:
     return datetime.now(timezone.utc)
@@ -140,6 +146,9 @@ class Order(Base):
     processing_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
     print_done_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
 
+    # Summary of the product photo reviews (see services.refresh_photo_summary), for lists and flags
+    photo_status: Mapped[str | None] = mapped_column(String(16))
+
     # Source file / extraction
     source_filename: Mapped[str | None] = mapped_column(String(255))
     source_pdf_path: Mapped[str | None] = mapped_column(String(500))
@@ -180,6 +189,7 @@ class OrderItem(Base):
     rate: Mapped[float | None] = mapped_column(Float)
     original_rate: Mapped[float | None] = mapped_column(Float)  # struck-through price printed on the PO
     value: Mapped[float | None] = mapped_column(Float)
+    printing_price: Mapped[float | None] = mapped_column(Float)  # printing charge per unit, entered by Sales
     weight: Mapped[str | None] = mapped_column(String(100))
     hsn: Mapped[str | None] = mapped_column(String(32))
     tax: Mapped[str | None] = mapped_column(String(32))
@@ -190,6 +200,12 @@ class OrderItem(Base):
     customization_text: Mapped[str | None] = mapped_column(Text)  # same name/text on every unit
     logo_reference: Mapped[str | None] = mapped_column(Text)
     notes: Mapped[str | None] = mapped_column(Text)
+
+    # Print preview review by Sales: Pending -> Confirmed (final) or Rejected (Printing uploads a new preview)
+    photo_status: Mapped[str | None] = mapped_column(String(16))
+    photo_reviewed_by: Mapped[str | None] = mapped_column(String(64))
+    photo_reviewed_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    photo_review_note: Mapped[str | None] = mapped_column(Text)
 
     order: Mapped[Order] = relationship(back_populates="items")
 
@@ -228,12 +244,14 @@ class OrderAttachment(Base):
 
 
 class OrderPhoto(Base):
-    """Post-print photos (uploaded by Printing after Print Done)."""
+    """Print preview photos uploaded by Printing for Sales to confirm (before Print Done). item_id is the product
+    row the photo shows; null for photos uploaded before photos were linked to products."""
 
     __tablename__ = "order_photos"
 
     id: Mapped[int] = mapped_column(primary_key=True)
     order_id: Mapped[int] = mapped_column(ForeignKey("orders.id", ondelete="CASCADE"), index=True)
+    item_id: Mapped[int | None] = mapped_column(ForeignKey("order_items.id", ondelete="SET NULL"))
     file_path: Mapped[str] = mapped_column(String(500))
     original_filename: Mapped[str] = mapped_column(String(255))
     content_type: Mapped[str] = mapped_column(String(100))
@@ -277,6 +295,7 @@ class SalesContact(Base):
     name: Mapped[str] = mapped_column(String(200))
     # normalised name (trimmed, inner spaces collapsed, case-folded): one contact per key
     name_key: Mapped[str] = mapped_column(String(200), unique=True, index=True)
+    mobile: Mapped[str | None] = mapped_column(String(20))
     source: Mapped[str] = mapped_column(String(16), default="admin")  # extracted | manual | admin | backfill
     created_by: Mapped[str | None] = mapped_column(String(64))
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)

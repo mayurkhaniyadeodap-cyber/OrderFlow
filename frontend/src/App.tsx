@@ -16,6 +16,7 @@ import { AdminContactOrdersPage } from "./pages/admin/AdminContactOrders";
 import { AdminContactsPage } from "./pages/admin/AdminContacts";
 import { AdminDashboardPage } from "./pages/admin/AdminDashboard";
 import { AdminOrdersPage } from "./pages/admin/AdminOrders";
+import { AdminPhotosPage } from "./pages/admin/AdminPhotos";
 import { AdminSettingsPage } from "./pages/admin/AdminSettings";
 import { AdminUsersPage } from "./pages/admin/AdminUsers";
 import type { Role } from "./types";
@@ -82,6 +83,7 @@ export const routes: RouteObject[] = [
               { path: "/queue", element: <RequireRole roles={["printing"]}><OrdersListPage mode="printing" /></RequireRole> },
               { path: "/orders/:id", element: <OrderPage /> },
               { path: "/admin/orders", element: admin(<AdminOrdersPage />) },
+              { path: "/admin/photos", element: admin(<AdminPhotosPage />) },
               { path: "/admin/users", element: admin(<AdminUsersPage />) },
               { path: "/admin/contacts", element: admin(<AdminContactsPage />) },
               { path: "/admin/contacts/:id", element: admin(<AdminContactOrdersPage />) },

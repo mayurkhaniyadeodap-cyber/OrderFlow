@@ -1,11 +1,19 @@
 import { AlertCircle, AlertTriangle, CheckCircle2, Eye, EyeOff, Info, Loader2, X } from "lucide-react";
 import { useEffect, useRef, useState, type InputHTMLAttributes, type ReactNode } from "react";
-import type { OrderStatus, PrintingStatus } from "../types";
+import type { OrderStatus, PhotoStatus, PrintingStatus } from "../types";
 
 export function StatusPill({ status }: { status: OrderStatus | PrintingStatus | null | undefined }) {
   if (!status) return <span className="muted">—</span>;
   const cls = status.toLowerCase().replace(/\s+/g, "-");
   return <span className={`pill pill-${cls}`}>{status}</span>;
+}
+
+const PHOTO_LABELS: Record<PhotoStatus, string> = { Pending: "Waiting for confirmation", Confirmed: "Confirmed", Rejected: "Rejected" };
+
+/** Print preview review state of one product: no preview yet, waiting for Sales, confirmed or rejected. */
+export function PhotoPill({ status }: { status: PhotoStatus | null | undefined }) {
+  if (!status) return <span className="pill pill-photo-missing">No preview yet</span>;
+  return <span className={`pill pill-photo-${status.toLowerCase()}`}>{PHOTO_LABELS[status]}</span>;
 }
 
 export function Spinner({ label = "Loading…" }: { label?: string }) {

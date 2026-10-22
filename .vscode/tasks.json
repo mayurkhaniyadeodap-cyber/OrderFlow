@@ -1,0 +1,40 @@
+{
+  // Run OrderFlow inside VS Code terminals: Ctrl+Shift+B (or Terminal → Run Task → "OrderFlow: Run (backend + frontend)").
+  // Backend on http://127.0.0.1:8010 (PORT in backend\.env), website on http://127.0.0.1:5173.
+  // Stop: click the trash-can icon on each terminal tab, or Terminal → Terminate Task.
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "OrderFlow: Backend",
+      "type": "process",
+      "command": "${workspaceFolder}\\backend\\.venv\\Scripts\\python.exe",
+      "args": ["-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", "8010", "--reload"],
+      "options": { "cwd": "${workspaceFolder}\\backend" },
+      "isBackground": true,
+      "problemMatcher": {
+        "pattern": { "regexp": "^__never__$" },
+        "background": { "activesBegin": true, "beginsPattern": "Started (server|reloader) process", "endsPattern": "Application startup complete" }
+      },
+      "presentation": { "group": "orderflow", "panel": "dedicated", "reveal": "always" }
+    },
+    {
+      "label": "OrderFlow: Frontend",
+      "type": "shell",
+      "command": "npm run dev",
+      "options": { "cwd": "${workspaceFolder}\\frontend", "env": { "PORT": "8010" } },
+      "isBackground": true,
+      "problemMatcher": {
+        "pattern": { "regexp": "^__never__$" },
+        "background": { "activesBegin": true, "beginsPattern": "vite", "endsPattern": "Local:" }
+      },
+      "presentation": { "group": "orderflow", "panel": "dedicated", "reveal": "always" }
+    },
+    {
+      "label": "OrderFlow: Run (backend + frontend)",
+      "dependsOn": ["OrderFlow: Backend", "OrderFlow: Frontend"],
+      "dependsOrder": "parallel",
+      "group": { "kind": "build", "isDefault": true },
+      "problemMatcher": []
+    }
+  ]
+}

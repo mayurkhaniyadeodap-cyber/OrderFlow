@@ -84,7 +84,7 @@ def test_admin_reads_all_orders_including_drafts_and_archived(client, admin):
     detail = client.get(f"/api/orders/{draft['id']}", headers=admin).json()
     assert detail["status"] == "Draft"
     assert detail["permissions"] == {"can_edit": True, "can_publish": True, "can_comment": True,
-                                     "next_printing_statuses": [], "can_upload_photos": False,
+                                     "next_printing_statuses": [], "can_upload_photos": False, "can_review_photos": False,
                                      "can_delete": True, "can_restore": False}
     assert client.get(f"/api/orders/{gone['id']}", headers=admin).status_code == 200
     assert client.get(f"/api/orders/{live['id']}/source-pdf", headers=admin).content == REAL_PO.read_bytes()

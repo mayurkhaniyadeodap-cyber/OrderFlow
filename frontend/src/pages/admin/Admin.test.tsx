@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { routes } from "../../App";
-import { makeOrder } from "../../test/fixtures";
+import { makeItem, makeOrder } from "../../test/fixtures";
 import type { AdminUser, Role } from "../../types";
 import { normalizeUsername, passwordProblem } from "./AdminUsers";
 
@@ -24,8 +24,8 @@ const DASHBOARD = {
 };
 
 const CONTACTS = [
-  { id: 1, name: "Dhruv Bhojani - Izzat (6358956693)", source: "backfill", created_by: "system", created_at: "2026-10-12T12:00:00Z", updated_at: null, orders: 4 },
-  { id: 2, name: "Rina Gohel-JD (9724696662)", source: "extracted", created_by: "sales", created_at: "2026-10-12T12:00:00Z", updated_at: null, orders: 1 },
+  { id: 1, name: "Dhruv Bhojani - Izzat (6358956693)", mobile: "6358956693", source: "backfill", created_by: "system", created_at: "2026-10-12T12:00:00Z", updated_at: null, orders: 4 },
+  { id: 2, name: "Rina Gohel-JD (9724696662)", mobile: null, source: "extracted", created_by: "sales", created_at: "2026-10-12T12:00:00Z", updated_at: null, orders: 1 },
 ];
 
 const CONTACT_ORDERS = {
@@ -48,16 +48,30 @@ function signIn(role: Role, id = role === "admin" ? 1 : 2) {
     if (url === "/api/me") return { user: { id, username: role, full_name: null, role }, config: { max_upload_mb: 15, timezone: "Asia/Kolkata" } };
     if (url === "/api/admin/dashboard") return DASHBOARD;
     if (url === "/api/admin/users") return { items: USERS };
-    if (url.startsWith("/api/orders/")) return makeOrder({ status: "Draft", permissions: { can_edit: false, can_publish: false, can_comment: false, next_printing_statuses: [], can_upload_photos: false, can_delete: false, can_restore: false } });
+    if (url.startsWith("/api/orders/")) return makeOrder({ status: "Draft", permissions: { can_edit: false, can_publish: false, can_comment: false, next_printing_statuses: [], can_upload_photos: false, can_review_photos: false, can_delete: false, can_restore: false } });
     if (url === "/api/admin/settings") return SETTINGS;
     if (url === "/api/admin/contacts") return { items: CONTACTS };
     if (url === "/api/admin/contacts/1/orders") return CONTACT_ORDERS;
     if (url === "/api/admin/contacts/2/orders") return { contact: CONTACTS[1], total: 0, items: [] };
+    if (url.startsWith("/api/admin/photo-reviews")) return PHOTO_REVIEWS;
     if (url === "/api/admin/backups") return { items: [{ name: "orderflow_backup_20261012_173654.zip", size_bytes: 1624220, created_at: "2026-10-12T17:36:54+05:30" }] };
     if (url === "/api/dashboard") return { role, counts: { total: 0, live: 0, awaiting_printing: 0, processing: 0, print_done: 0, draft: 0 }, recent: [] };
     throw new Error(`unexpected GET ${url}`);
   });
 }
+
+const PHOTO_ROW = {
+  order_id: 1, internal_order_no: "OF-2026-00001", po_number: "135", customer_name: "Kalpit Pandya - Frn", executive: "Dhruv Bhojani",
+  sales_user: "sales", printing_status: "Processing", live_at: "2026-10-12T10:00:00Z", position: 0, quantity: 60, photo_count: 1, last_photo_at: "2026-10-12T11:00:00Z",
+};
+const PHOTO_REVIEWS = {
+  counts: { Pending: 0, Confirmed: 1, Rejected: 1, Missing: 0 },
+  total: 2,
+  items: [
+    { ...PHOTO_ROW, item_id: 11, sku: "SKU-11", photo_status: "Confirmed", photo_reviewed_by: "sales", photo_reviewed_at: "2026-10-12T12:00:00Z", photo_review_note: null },
+    { ...PHOTO_ROW, item_id: 12, sku: "SKU-12", position: 1, photo_status: "Rejected", photo_reviewed_by: "sales", photo_reviewed_at: "2026-10-12T12:05:00Z", photo_review_note: "Logo blurred" },
+  ],
+};
 
 function renderAt(path: string) {
   render(<RouterProvider router={createMemoryRouter(routes, { initialEntries: [path] })} />);
@@ -94,7 +108,7 @@ describe("Admin navigation and access", () => {
     const user = userEvent.setup();
     signIn("admin");
     const deleted = makeOrder({ status: "Live", internal_order_no: "OF-2026-00001", printing_status: "New", is_archived: true,
-      permissions: { can_edit: false, can_publish: false, can_comment: true, next_printing_statuses: [], can_upload_photos: false, can_delete: false, can_restore: true } });
+      permissions: { can_edit: false, can_publish: false, can_comment: true, next_printing_statuses: [], can_upload_photos: false, can_review_photos: false, can_delete: false, can_restore: true } });
     api.get.mockImplementation(async (url: string) => (url === "/api/me"
       ? { user: { id: 1, username: "admin", full_name: null, role: "admin" }, config: { max_upload_mb: 15, timezone: "Asia/Kolkata" } }
       : deleted));
@@ -237,6 +251,7 @@ describe("Executive Contacts", () => {
     renderAt("/admin/contacts");
     expect(await screen.findByText("Dhruv Bhojani - Izzat (6358956693)")).toBeInTheDocument();
     expect(screen.getByText("From existing orders")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "6358956693" })).toHaveAttribute("href", "tel:6358956693");
 
     await user.type(screen.getByLabelText("Name"), "  Priya Shah ");
     await user.click(screen.getByRole("button", { name: /Add contact/ }));
@@ -247,8 +262,9 @@ describe("Executive Contacts", () => {
     expect(dialog.getByText(/keep it unchanged/)).toBeInTheDocument();
     await user.clear(dialog.getByLabelText("Name"));
     await user.type(dialog.getByLabelText("Name"), "Rina Gohel");
+    await user.type(dialog.getByLabelText("Mobile"), "97246 96662");
     await user.click(dialog.getByRole("button", { name: "Save" }));
-    expect(api.patch).toHaveBeenCalledWith("/api/admin/contacts/2", { name: "Rina Gohel" });
+    expect(api.patch).toHaveBeenCalledWith("/api/admin/contacts/2", { name: "Rina Gohel", mobile: "97246 96662" });
 
     await user.click(screen.getByRole("button", { name: "Delete Dhruv Bhojani - Izzat (6358956693)" }));
     expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining("those orders keep the name"));
@@ -388,5 +404,79 @@ describe("Upload PO: Admin chooses the Sales user", () => {
     const [, form] = api.upload.mock.calls[0] as [string, FormData];
     expect(form.get("owner")).toBeNull();
     expect(api.get).not.toHaveBeenCalledWith("/api/admin/users");
+  });
+});
+
+describe("Product-wise photo review", () => {
+  it("shows Admins which product photo was confirmed or rejected", async () => {
+    signIn("admin");
+    renderAt("/admin/photos");
+    expect(await screen.findByRole("heading", { name: "Photo Reviews" })).toBeInTheDocument();
+    const confirmed = (await screen.findByText("SKU-11")).closest("tr")!;
+    expect(within(confirmed).getByText("Confirmed")).toBeInTheDocument();
+    const rejected = screen.getByText("SKU-12").closest("tr")!;
+    expect(within(rejected).getByText("Rejected")).toBeInTheDocument();
+    expect(within(rejected).getByText("Logo blurred")).toBeInTheDocument();
+    await userEvent.setup().click(screen.getByRole("tab", { name: /Rejected/ }));
+    await waitFor(() => expect(api.get).toHaveBeenCalledWith("/api/admin/photo-reviews?status=Rejected"));
+  });
+
+  it("confirms the photo of one product from the order page", async () => {
+    const user = userEvent.setup();
+    signIn("admin");
+    const base = api.get.getMockImplementation()!;
+    const photo = (id: number, item_id: number) => ({ id, item_id, filename: `p${id}.png`, content_type: "image/png", uploaded_by: "printing", uploaded_at: "2026-10-12T11:00:00Z", url: `/api/orders/1/photos/${id}` });
+    const order = makeOrder({
+      status: "Live", printing_status: "Processing", internal_order_no: "OF-2026-00001",
+      items: [
+        makeItem(11, { photo_status: "Pending", photos: [photo(1, 11)] }),
+        makeItem(12, { sku: "SKU-12", photo_status: "Confirmed", photo_reviewed_by: "sales", photo_reviewed_at: "2026-10-12T12:00:00Z", photos: [photo(2, 12)] }),
+      ],
+      photos: [photo(1, 11), photo(2, 12)],
+      permissions: { can_edit: false, can_publish: false, can_comment: true, next_printing_statuses: [], can_upload_photos: false, can_review_photos: true, can_delete: true, can_restore: false },
+    });
+    api.get.mockImplementation(async (url: string) => (url === "/api/orders/1" ? order : base(url)));
+    api.post.mockResolvedValue(order);
+    api.blob.mockReturnValue(new Promise(() => {})); // photo thumbnails stay loading
+    renderAt("/orders/1");
+    await screen.findByRole("heading", { name: "OF-2026-00001" });
+    await user.click(await screen.findByRole("button", { name: "Confirm preview of SKU-11" }));
+    expect(screen.queryByRole("button", { name: "Confirm preview of SKU-12" })).not.toBeInTheDocument(); // already confirmed
+    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: /Yes, confirm/ }));
+    expect(api.post).toHaveBeenCalledWith("/api/orders/1/items/11/photo-review", { version: 3, action: "confirm", note: null });
+  });
+
+  it("locks Mark Print Done for Printing until every product preview is confirmed", async () => {
+    signIn("printing");
+    const base = api.get.getMockImplementation()!;
+    const perms = { can_edit: false, can_publish: false, can_comment: true, next_printing_statuses: ["Print Done" as const], can_upload_photos: true, can_review_photos: false, can_delete: false, can_restore: false };
+    const order = makeOrder({
+      status: "Live", printing_status: "Processing", internal_order_no: "OF-2026-00002",
+      items: [makeItem(11, { photo_status: "Confirmed" }), makeItem(12, { sku: "SKU-12", photo_status: "Rejected", photo_review_note: "Logo too small" })],
+      permissions: perms,
+    });
+    api.get.mockImplementation(async (url: string) => (url === "/api/orders/1" ? order : base(url)));
+    renderAt("/orders/1");
+    expect(await screen.findByRole("button", { name: /Mark Print Done/ })).toBeDisabled();
+    expect(screen.getByText(/1 product preview not confirmed by Sales/)).toBeInTheDocument();
+    expect(screen.getByText(/Logo too small/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Upload preview for SKU-12" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Upload preview for SKU-11" })).not.toBeInTheDocument(); // confirmed is final
+  });
+
+  it("shows Sales' reject on the Printing screen without a manual refresh", async () => {
+    signIn("printing");
+    const base = api.get.getMockImplementation()!;
+    const perms = { can_edit: false, can_publish: false, can_comment: true, next_printing_statuses: ["Print Done" as const], can_upload_photos: true, can_review_photos: false, can_delete: false, can_restore: false };
+    const before = makeOrder({ status: "Live", printing_status: "Processing", internal_order_no: "OF-2026-00002", items: [makeItem(11, { photo_status: "Pending" })], permissions: perms });
+    const after = { ...before, version: 4, items: [makeItem(11, { photo_status: "Rejected" as const, photo_review_note: "Make the logo bigger", photo_reviewed_by: "sales" })] };
+    let current = before;
+    api.get.mockImplementation(async (url: string) => (url === "/api/orders/1" ? current : base(url)));
+    renderAt("/orders/1");
+    expect(await screen.findByText("Waiting for confirmation")).toBeInTheDocument();
+    current = after; // Sales rejects the preview in their own browser
+    window.dispatchEvent(new Event("focus")); // also happens every 10 seconds
+    expect(await screen.findByText(/Make the logo bigger/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Upload preview for SKU-11" })).toHaveTextContent("Upload new preview");
   });
 });

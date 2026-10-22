@@ -386,7 +386,7 @@ describe("Delete and Admin Live editing", () => {
   it("lets an Admin edit a Live order without publishing again", async () => {
     const user = userEvent.setup();
     const live = makeOrder({ status: "Live", internal_order_no: "OF-2026-00007", printing_status: "Processing", global_customization: "Logo",
-      permissions: { can_edit: true, can_publish: false, can_comment: true, next_printing_statuses: [], can_upload_photos: false, can_delete: true, can_restore: false } });
+      permissions: { can_edit: true, can_publish: false, can_comment: true, next_printing_statuses: [], can_upload_photos: false, can_review_photos: false, can_delete: true, can_restore: false } });
     api.put.mockResolvedValue({ ...live, version: 4, customer_name: "Fixed Name" });
     renderEditor(live);
     expect(screen.getByText("You are editing a Live order")).toBeInTheDocument();
@@ -406,7 +406,7 @@ describe("published orders", () => {
     api.get.mockResolvedValue(makeOrder({
       status: "Live", internal_order_no: "OF-2026-00001", printing_status: "New", live_at: "2026-10-12T07:30:00+00:00",
       global_customization: "Logo",
-      permissions: { can_edit: false, can_publish: false, can_comment: true, next_printing_statuses: [], can_upload_photos: false, can_delete: false, can_restore: false },
+      permissions: { can_edit: false, can_publish: false, can_comment: true, next_printing_statuses: [], can_upload_photos: false, can_review_photos: false, can_delete: false, can_restore: false },
     }));
     const router = createMemoryRouter([{ path: "/orders/:id", element: <OrderPage /> }], { initialEntries: ["/orders/1"] });
     render(<AuthProvider><ToastProvider><RouterProvider router={router} /></ToastProvider></AuthProvider>);
@@ -422,7 +422,7 @@ describe("published orders", () => {
     const user = userEvent.setup();
     const live = makeOrder({ status: "Live", internal_order_no: "OF-2026-00001", printing_status: "New", live_at: "2026-10-12T07:30:00+00:00",
       global_customization: "Logo",
-      permissions: { can_edit: false, can_publish: false, can_comment: true, next_printing_statuses: [], can_upload_photos: false, can_delete: true, can_restore: false } });
+      permissions: { can_edit: false, can_publish: false, can_comment: true, next_printing_statuses: [], can_upload_photos: false, can_review_photos: false, can_delete: true, can_restore: false } });
     api.get.mockResolvedValue(live);
     api.post.mockResolvedValue({ ...live, is_archived: true, permissions: { ...live.permissions, can_delete: false } });
     const router = createMemoryRouter([{ path: "/orders/:id", element: <OrderPage /> }], { initialEntries: ["/orders/1"] });

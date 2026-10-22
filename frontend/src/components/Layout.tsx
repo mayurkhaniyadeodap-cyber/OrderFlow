@@ -1,4 +1,5 @@
 import {
+  Camera,
   ClipboardList,
   Contact,
   DatabaseBackup,
@@ -35,6 +36,7 @@ export function Layout() {
     ? [
         { to: "/", label: "Admin Dashboard", icon: LayoutDashboard, end: true },
         { to: "/admin/orders", label: "All Orders", icon: ClipboardList },
+        { to: "/admin/photos", label: "Photo Reviews", icon: Camera },
         { to: "/upload", label: "Upload PO", icon: Upload },
         { to: "/admin/users", label: "Users", icon: Users },
         { to: "/admin/contacts", label: "Executive Contacts", icon: Contact },

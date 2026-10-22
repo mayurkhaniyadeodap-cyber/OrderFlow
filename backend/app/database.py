@@ -135,7 +135,50 @@ def configure_database(path: Path, backup_dir: Path | None = None) -> Engine:
     _upgrade_schema(path, backup_dir)
     _snapshot_before_new_tables(path, backup_dir)
     Base.metadata.create_all(_engine)
+    _add_missing_columns(path, backup_dir)
     return _engine
+
+
+def _add_missing_columns(db_path: Path, backup_dir: Path | None) -> None:
+    """Add columns introduced by an update to existing tables (create_all only creates missing tables).
+
+    Only nullable columns without defaults are added, so existing rows simply get NULL; nothing is dropped or
+    rewritten. A safety snapshot is taken first, and all ALTERs run in one transaction.
+    """
+    from sqlalchemy.dialects import sqlite as sqlite_dialect
+
+    if not db_path.exists():
+        return
+    dialect = sqlite_dialect.dialect()
+    con = sqlite3.connect(str(db_path), isolation_level=None, timeout=30)
+    try:
+        missing: list[tuple[str, str, str]] = []
+        for table in Base.metadata.sorted_tables:
+            have = {r[1] for r in con.execute(f'PRAGMA table_info("{table.name}")')}
+            if not have:
+                continue
+            for col in table.columns:
+                if col.name not in have:
+                    if not col.nullable:
+                        raise RuntimeError(f"Cannot add required column {table.name}.{col.name} automatically.")
+                    missing.append((table.name, col.name, col.type.compile(dialect=dialect)))
+        if not missing:
+            return
+        if backup_dir is not None:
+            stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            saved = snapshot_database(db_path, backup_dir / f"pre_column_update_{stamp}.db")
+            log.warning("Adding column(s) %s; safety copy saved to %s",
+                        ", ".join(f"{t}.{c}" for t, c, _ in missing), saved)
+        con.execute("BEGIN IMMEDIATE")
+        try:
+            for table_name, col_name, col_type in missing:
+                con.execute(f'ALTER TABLE "{table_name}" ADD COLUMN "{col_name}" {col_type}')
+            con.execute("COMMIT")
+        except BaseException:
+            con.execute("ROLLBACK")
+            raise
+    finally:
+        con.close()
 
 
 def _snapshot_before_new_tables(db_path: Path, backup_dir: Path | None) -> None:

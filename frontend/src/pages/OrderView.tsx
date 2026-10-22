@@ -1,11 +1,12 @@
-import { Camera, CheckCircle2, FileText, Globe2, Lock, Package, PlayCircle, Printer, Trash2, Truck, User as UserIcon } from "lucide-react";
-import { useRef, useState } from "react";
+import { CheckCircle2, FileText, Globe2, Lock, Package, Phone, PlayCircle, Printer, Trash2, Truck, User as UserIcon } from "lucide-react";
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import { api, openFile } from "../api";
 import { useAuth } from "../auth";
 import { DeleteOrderDialog, RestoreOrderButton } from "../components/DeleteOrder";
 import { Discussion } from "../components/Discussion";
 import { AttachmentList } from "../components/Files";
+import { ProductPhotos, unconfirmedPreviews } from "../components/ProductPhotos";
 import { useToast } from "../components/Toast";
 import { Alert, ErrorAlert, KV, Modal, Section, StatusPill } from "../components/ui";
 import { fmtDateTime, fmtMoney, fmtNumber, fmtSourceDate } from "../format";
@@ -21,10 +22,15 @@ export function OrderView({ order, setOrder }: { order: OrderDetail; setOrder: (
   const [confirmStatus, setConfirmStatus] = useState<PrintingStatus | null>(null);
   const [error, setError] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
-  const photoInput = useRef<HTMLInputElement>(null);
   const [deleting, setDeleting] = useState(false);
   const printing = user?.role === "printing";
+  const printingTotal = order.items.some((it) => it.printing_price !== null)
+    ? order.items.reduce((sum, it) => sum + (it.printing_price ?? 0) * (it.quantity ?? 0), 0)
+    : null;
   const next = order.permissions.next_printing_statuses[0];
+  // Print Done needs Sales to have confirmed the print preview of every product
+  const previewsLeft = unconfirmedPreviews(order).length;
+  const doneBlocked = next === "Print Done" && previewsLeft > 0;
 
   const changeStatus = async (status: PrintingStatus) => {
     setBusy(true);
@@ -37,17 +43,6 @@ export function OrderView({ order, setOrder }: { order: OrderDetail; setOrder: (
     } finally {
       setBusy(false);
       setConfirmStatus(null);
-    }
-  };
-
-  const uploadPhoto = async (file: File) => {
-    const data = new FormData();
-    data.append("file", file);
-    try {
-      setOrder(await api.upload<OrderDetail>(`/api/orders/${order.id}/photos`, data));
-      toast("Photo uploaded");
-    } catch (err) {
-      toast((err as Error).message, "error");
     }
   };
 
@@ -86,7 +81,12 @@ export function OrderView({ order, setOrder }: { order: OrderDetail; setOrder: (
             <Printer size={16} /> Print order
           </Link>
           {printing && next && (
-            <button className={`btn ${next === "Print Done" ? "btn-success" : "btn-primary"}`} disabled={busy} onClick={() => setConfirmStatus(next)}>
+            <button
+              className={`btn ${next === "Print Done" ? "btn-success" : "btn-primary"}`}
+              disabled={busy || doneBlocked}
+              title={doneBlocked ? `Sales has not confirmed ${previewsLeft} product preview(s) yet` : undefined}
+              onClick={() => setConfirmStatus(next)}
+            >
               {next === "Print Done" ? <CheckCircle2 size={16} /> : <PlayCircle size={16} />}
               {next === "Processing" ? "Start processing" : "Mark Print Done"}
             </button>
@@ -95,6 +95,11 @@ export function OrderView({ order, setOrder }: { order: OrderDetail; setOrder: (
       </div>
 
       <ErrorAlert error={error} onClose={() => setError(null)} />
+      {printing && doneBlocked && (
+        <Alert tone="warning" title={`Mark Print Done is locked: ${previewsLeft} product preview${previewsLeft === 1 ? "" : "s"} not confirmed by Sales`}>
+          Upload a preview photo for each product in <b>Print preview photos</b> below and wait for Sales to confirm them.
+        </Alert>
+      )}
       {order.is_archived && (
         <Alert tone="warning" title="This order is deleted (archived)">
           It is hidden from lists{order.status === "Live" ? " and the Printing queue" : ""}. Its details and history are kept
@@ -135,7 +140,16 @@ export function OrderView({ order, setOrder }: { order: OrderDetail; setOrder: (
             <KV label="Contact">{order.contact}</KV>
             <KV label="Email">{order.email}</KV>
             <KV label="GSTIN">{order.gstin}</KV>
-            <KV label="Executive">{order.executive}</KV>
+            <KV label="Executive">
+              {order.executive}
+              {order.executive_mobile && (
+                <div>
+                  <a className="tel-link" href={`tel:${order.executive_mobile.replace(/[^\d+]/g, "")}`}>
+                    <Phone size={13} /> {order.executive_mobile}
+                  </a>
+                </div>
+              )}
+            </KV>
             <KV label="Billing address" wide>
               <span className="pre">{order.billing_address}</span>
             </KV>
@@ -169,6 +183,7 @@ export function OrderView({ order, setOrder }: { order: OrderDetail; setOrder: (
                 <th>Notes</th>
                 {!printing && <th className="num">Rate</th>}
                 {!printing && <th className="num">Value</th>}
+                {!printing && <th className="num">Printing price</th>}
               </tr>
             </thead>
             <tbody>
@@ -199,6 +214,14 @@ export function OrderView({ order, setOrder }: { order: OrderDetail; setOrder: (
                   <td data-label="Notes">{it.notes ?? <span className="muted">—</span>}</td>
                   {!printing && <td data-label="Rate" className="num">{fmtNumber(it.rate)}</td>}
                   {!printing && <td data-label="Value" className="num">{fmtNumber(it.value)}</td>}
+                  {!printing && (
+                    <td data-label="Printing price" className="num">
+                      {fmtNumber(it.printing_price)}
+                      {it.printing_price !== null && it.quantity ? (
+                        <div className="muted small">= {fmtNumber(Math.round(it.printing_price * it.quantity * 100) / 100)}</div>
+                      ) : null}
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
@@ -212,6 +235,7 @@ export function OrderView({ order, setOrder }: { order: OrderDetail; setOrder: (
             {order.additional_charges !== null && <KV label="Additional">{fmtMoney(order.additional_charges)}</KV>}
             {order.tax !== null && <KV label="Tax">{fmtMoney(order.tax)}</KV>}
             <KV label="Total"><strong>{fmtMoney(order.total)}</strong></KV>
+            {printingTotal !== null && <KV label="Printing total"><strong>{fmtMoney(Math.round(printingTotal * 100) / 100)}</strong></KV>}
           </div>
         )}
       </Section>
@@ -226,45 +250,7 @@ export function OrderView({ order, setOrder }: { order: OrderDetail; setOrder: (
         <AttachmentList files={order.global_attachments} />
       </Section>
 
-      {order.status === "Live" && (
-        <Section
-          title={`Post-print photos (${order.photos.length})`}
-          icon={<Camera size={18} />}
-          actions={
-            order.permissions.can_upload_photos ? (
-              <>
-                <button className="btn btn-sm btn-secondary" onClick={() => photoInput.current?.click()}>
-                  <Camera size={14} /> Upload photo
-                </button>
-                <input
-                  ref={photoInput}
-                  type="file"
-                  hidden
-                  accept="image/png,image/jpeg,image/gif,image/webp"
-                  onChange={(e) => {
-                    const f = e.target.files?.[0];
-                    if (f) uploadPhoto(f);
-                    e.target.value = "";
-                  }}
-                />
-              </>
-            ) : undefined
-          }
-          className="no-print"
-        >
-          {order.photos.length === 0 ? (
-            <p className="muted">
-              {order.printing_status === "Print Done"
-                ? printing
-                  ? "Upload photos of the finished print for the record."
-                  : "No photos uploaded yet."
-                : "Photos can be uploaded by Printing after the order is marked Print Done."}
-            </p>
-          ) : (
-            <AttachmentList files={order.photos} />
-          )}
-        </Section>
-      )}
+      {order.status === "Live" && <ProductPhotos order={order} setOrder={setOrder} />}
 
       <Discussion order={order} onChange={setOrder} />
 

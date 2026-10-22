@@ -21,6 +21,7 @@ import { useAuth } from "../auth";
 import { DeleteOrderDialog } from "../components/DeleteOrder";
 import { Discussion } from "../components/Discussion";
 import { AttachmentList } from "../components/Files";
+import { ProductPhotos } from "../components/ProductPhotos";
 import { useToast } from "../components/Toast";
 import { Alert, ErrorAlert, Modal, Section, StatusPill } from "../components/ui";
 import { fmtDateTime } from "../format";
@@ -340,7 +341,14 @@ export function OrderEditor({ order, setOrder }: { order: OrderDetail; setOrder:
           {text("gstin", "GSTIN")}
           {text("executive", "Executive / sales contact", {
             list: "executive-list",
-            hint: "Pick a saved contact or type a new name; new names are added to the contact list when you save.",
+            hint: (
+              <>
+                Pick a saved contact or type a new name; new names are added to the contact list when you save.
+                {order.executive_mobile && form.executive.trim() === (order.executive ?? "") && (
+                  <> Mobile: <a href={`tel:${order.executive_mobile.replace(/[^\d+]/g, "")}`}>{order.executive_mobile}</a></>
+                )}
+              </>
+            ),
           })}
           <datalist id="executive-list">
             {contactNames.map((n) => <option key={n} value={n} />)}
@@ -409,6 +417,12 @@ export function OrderEditor({ order, setOrder }: { order: OrderDetail; setOrder:
           onSave={saveGlobal}
         />
       </Section>
+
+      {isLive && (
+        // Admin editing a Live order: review previews here too. A review reloads the order, so unsaved edits
+        // must be saved first.
+        <ProductPhotos order={order} setOrder={setOrder} locked={dirty ? "Save or discard your unsaved changes above before confirming or rejecting previews." : undefined} />
+      )}
 
       <Discussion order={order} onChange={setOrder} />
 
@@ -638,6 +652,21 @@ function ItemCard({
         {input("sku", "SKU / code *", { wide: true })}
         {input("quantity", "Qty *", { numeric: true })}
         {input("rate", "Rate", { numeric: true })}
+        <div className={`field ${errors[`items.${index}.printing_price`] ? "has-error" : ""}`}>
+          <label htmlFor={`${item.key}-printing_price`}>Printing price</label>
+          <input
+            id={`${item.key}-printing_price`}
+            inputMode="decimal"
+            placeholder="per unit"
+            value={item.printing_price}
+            onChange={(e) => onChange({ printing_price: e.target.value })}
+          />
+          {errors[`items.${index}.printing_price`] ? (
+            <div className="field-error">{errors[`items.${index}.printing_price`]}</div>
+          ) : (
+            checks.printingTotal !== null && <div className="field-hint">× {item.quantity} = {checks.printingTotal.toFixed(2)}</div>
+          )}
+        </div>
         <div className={`field ${errors[`items.${index}.value`] ? "has-error" : ""} ${checks.mismatch ? "has-flag" : ""}`}>
           <label htmlFor={`${item.key}-value`}>Line value</label>
           <div className="input-with-btn">

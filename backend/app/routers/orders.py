@@ -16,7 +16,6 @@ from .. import services as svc
 from ..config import settings
 from ..database import get_db
 from ..models import (
-    PRINT_DONE,
     PRINTING_FLOW,
     ROLE_PRINTING,
     STATUS_DRAFT,
@@ -28,7 +27,15 @@ from ..models import (
     User,
 )
 from ..pdf_extract import extract_po
-from ..schemas import CommentRequest, GlobalUpdate, ItemSave, OrderUpdate, PrintingStatusRequest, PublishRequest
+from ..schemas import (
+    CommentRequest,
+    GlobalUpdate,
+    ItemSave,
+    OrderUpdate,
+    PhotoReviewRequest,
+    PrintingStatusRequest,
+    PublishRequest,
+)
 from ..security import require_admin, require_manager, require_printing, require_viewer
 
 router = APIRouter(prefix="/orders", tags=["orders"])
@@ -317,19 +324,32 @@ def get_attachment(order_id: int, attachment_id: int, user: User = Depends(requi
 
 
 @router.post("/{order_id}/photos", status_code=status.HTTP_201_CREATED)
-async def upload_photo(order_id: int, file: UploadFile = File(...), user: User = Depends(require_printing),
-                       db: Session = Depends(get_db)) -> dict:
+async def upload_photo(order_id: int, file: UploadFile = File(...), item_id: int = Form(...),
+                       user: User = Depends(require_printing), db: Session = Depends(get_db)) -> dict:
+    """Printing: upload a print preview photo of one product row; it then waits for Sales to confirm it."""
     order = svc.get_order_for(db, order_id, user)
-    if order.printing_status != PRINT_DONE:
-        raise svc.http_error(status.HTTP_409_CONFLICT, "Photos can be uploaded after the order is marked Print Done.")
+    item = svc.find_item(order, item_id)
+    svc.ensure_photo_upload_allowed(order, item)
     data = await svc.read_upload(file)
     detected = svc.detect_file_type(data, IMAGE_TYPES)
     if detected is None:
         raise svc.http_error(status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, "Photos must be PNG, JPG, GIF or WEBP images.")
     filename = svc.safe_display_name(file.filename, "photo" + detected[1])
-    db.add(OrderPhoto(order=order, file_path=svc.store_file(data, "photos", detected[1]), original_filename=filename,
-                      content_type=detected[0], uploaded_by=user.username))
-    svc.add_event(db, order, user, "photo_uploaded", f"{filename} uploaded.")
+    db.add(OrderPhoto(order=order, item_id=item.id, file_path=svc.store_file(data, "photos", detected[1]),
+                      original_filename=filename, content_type=detected[0], uploaded_by=user.username))
+    svc.mark_photo_pending(order, item)
+    svc.add_event(db, order, user, "photo_uploaded",
+                  f"Preview {filename} uploaded for {svc.item_label(item)}; waiting for Sales to confirm.")
+    db.commit()
+    return svc.order_detail(order, user)
+
+
+@router.post("/{order_id}/items/{item_id}/photo-review")
+def review_item_photo(order_id: int, item_id: int, body: PhotoReviewRequest, user: User = Depends(require_manager),
+                      db: Session = Depends(get_db)) -> dict:
+    """Sales (own orders) or Admin: confirm one product's print preview photo, or reject it with a reason."""
+    order = svc.get_order_for(db, order_id, user)
+    svc.review_item_photo(db, order, svc.find_item(order, item_id), user, body)
     db.commit()
     return svc.order_detail(order, user)
 

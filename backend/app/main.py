@@ -41,6 +41,9 @@ async def lifespan(_app: FastAPI):
             audit.record(db, "system", "contacts_backfilled", None, f"{added} contact(s) imported from existing orders.")
             db.commit()
             log.warning("Executive contacts: %d imported from existing orders (one-time).", added)
+        filled = contacts.backfill_mobiles(db)  # one-time: mobile numbers printed in existing contact names
+        if filled:
+            log.warning("Executive contacts: mobile number filled from the name for %d contact(s) (one-time).", filled)
     yield
 
 

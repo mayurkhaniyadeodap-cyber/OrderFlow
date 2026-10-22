@@ -7,7 +7,9 @@ from app.config import settings
 from app.database import SessionLocal, configure_database
 from app.models import Order
 
-from .conftest import ANNESHA, LOGO_JPEG, MEET_PAPERS, REAL_PO, login, make_live, payload, publish, save, upload
+from .conftest import (
+    ANNESHA, LOGO_JPEG, MEET_PAPERS, REAL_PO, approve_previews, login, make_live, payload, publish, save, upload,
+)
 
 
 # ---------------------------------------------------------------- upload
@@ -226,6 +228,10 @@ def test_printing_status_flow_and_lock(client, sales, printing):
     assert r.json()["permissions"]["next_printing_statuses"] == ["Print Done"]
     back = client.post(url, headers=printing, json={"status": "New"})
     assert back.status_code == 409
+    blocked = client.post(url, headers=printing, json={"status": "Print Done"})  # previews not confirmed yet
+    assert blocked.status_code == 409 and blocked.json()["detail"]["code"] == "previews_not_confirmed"
+    assert len(blocked.json()["detail"]["errors"]) == len(live["items"])
+    approve_previews(client, live)
     done = client.post(url, headers=printing, json={"status": "Print Done"}).json()
     assert done["printing_status"] == "Print Done" and done["print_done_at"]
     assert done["permissions"]["next_printing_statuses"] == []
@@ -236,17 +242,27 @@ def test_printing_status_flow_and_lock(client, sales, printing):
     assert events == ["New → Processing", "Processing → Print Done"]
 
 
-def test_photo_upload_after_print_done(client, sales, printing):
+def test_preview_photo_upload_before_print_done(client, sales, printing):
+    draft = upload(client, sales)
+    url = f"/api/orders/{draft['id']}/photos"
+    item = {"item_id": str(draft["items"][0]["id"])}  # previews are uploaded per product row
+    files = {"file": ("preview.jpeg", LOGO_JPEG.read_bytes(), "image/jpeg")}
+    assert client.post(url, headers=printing, data=item, files=files).status_code == 404  # Drafts are not printing work
     live = make_live(client, sales)
     url = f"/api/orders/{live['id']}/photos"
-    files = {"file": ("done.jpeg", LOGO_JPEG.read_bytes(), "image/jpeg")}
-    assert client.post(url, headers=printing, files=files).status_code == 409
-    for s in ("Processing", "Print Done"):
+    item = {"item_id": str(live["items"][0]["id"])}
+    assert client.post(url, headers=sales, data=item, files=files).status_code == 403
+    r = client.post(url, headers=printing, data=item, files=files)  # allowed while New
+    assert r.status_code == 201 and r.json()["photos"][0]["filename"] == "preview.jpeg"
+    assert r.json()["items"][0]["photo_status"] == "Pending"
+    pdf = {"file": ("x.pdf", REAL_PO.read_bytes(), "application/pdf")}
+    assert client.post(url, headers=printing, data=item, files=pdf).status_code == 415
+    for s in ("Processing",):
         client.post(f"/api/orders/{live['id']}/printing-status", headers=printing, json={"status": s})
-    assert client.post(url, headers=sales, files=files).status_code == 403
-    r = client.post(url, headers=printing, files=files)
-    assert r.status_code == 201 and r.json()["photos"][0]["filename"] == "done.jpeg"
-    assert client.post(url, headers=printing, files={"file": ("x.pdf", REAL_PO.read_bytes(), "application/pdf")}).status_code == 415
+    assert client.post(url, headers=printing, data=item, files=files).status_code == 201  # and while Processing
+    approve_previews(client, live)
+    client.post(f"/api/orders/{live['id']}/printing-status", headers=printing, json={"status": "Print Done"})
+    assert client.post(url, headers=printing, data=item, files=files).status_code == 409  # not after Print Done
 
 
 def test_source_pdf_and_print_view(client, sales, printing):

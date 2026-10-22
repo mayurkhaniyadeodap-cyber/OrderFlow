@@ -10,10 +10,10 @@ export const ORDER_MONEY_FIELDS = [
   "subtotal", "packaging_charges", "processing_charges", "additional_charges", "tax", "total",
 ] as const;
 const ITEM_TEXT_FIELDS = ["sku", "product_name", "weight", "hsn", "tax", "location", "customization_text", "logo_reference", "notes"] as const;
-const ITEM_NUM_FIELDS = ["quantity", "rate", "original_rate", "value"] as const;
+const ITEM_NUM_FIELDS = ["quantity", "rate", "original_rate", "value", "printing_price"] as const;
 /** Item fields edited (and therefore sent) by the product card. The rest stay as stored on the server. */
 const SENT_ITEM_TEXT_FIELDS = ["sku", "customization_text", "logo_reference", "notes"] as const;
-const SENT_ITEM_NUM_FIELDS = ["quantity", "rate", "value"] as const;
+const SENT_ITEM_NUM_FIELDS = ["quantity", "rate", "value", "printing_price"] as const;
 
 type OrderTextField = (typeof ORDER_TEXT_FIELDS)[number];
 type OrderMoneyField = (typeof ORDER_MONEY_FIELDS)[number];
@@ -157,8 +157,13 @@ export function fieldWarnings(warnings: ExtractionWarning[]): Record<string, Ext
   return map;
 }
 
-export function itemChecks(item: ItemForm): { mismatch: string | null; names: { count: number; qty: number | null; ok: boolean } } {
+export function itemChecks(item: ItemForm): {
+  mismatch: string | null;
+  names: { count: number; qty: number | null; ok: boolean };
+  printingTotal: number | null;
+} {
   const qty = parseNum(item.quantity);
+  const printing = parseNum(item.printing_price);
   const rate = parseNum(item.rate);
   const value = parseNum(item.value);
   let mismatch: string | null = null;
@@ -168,7 +173,8 @@ export function itemChecks(item: ItemForm): { mismatch: string | null; names: { 
   }
   const count = splitNames(item.names).length;
   const q = typeof qty === "number" ? qty : null;
-  return { mismatch, names: { count, qty: q, ok: count === 0 || count === q } };
+  const printingTotal = typeof qty === "number" && typeof printing === "number" ? Math.round(qty * printing * 100) / 100 : null;
+  return { mismatch, names: { count, qty: q, ok: count === 0 || count === q }, printingTotal };
 }
 
 export const META_LABELS: Record<string, string> = {

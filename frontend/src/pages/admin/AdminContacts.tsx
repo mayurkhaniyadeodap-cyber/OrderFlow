@@ -1,4 +1,4 @@
-import { Contact, Pencil, Plus, Trash2 } from "lucide-react";
+import { Contact, Pencil, Phone, Plus, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../../api";
@@ -22,6 +22,7 @@ export function AdminContactsPage() {
   const [rows, setRows] = useState<SalesContactRow[] | null>(null);
   const [error, setError] = useState<unknown>(null);
   const [newName, setNewName] = useState("");
+  const [newMobile, setNewMobile] = useState("");
   const [adding, setAdding] = useState(false);
   const [addError, setAddError] = useState<unknown>(null);
   const [editing, setEditing] = useState<SalesContactRow | null>(null);
@@ -38,9 +39,12 @@ export function AdminContactsPage() {
     setAdding(true);
     setAddError(null);
     try {
-      const created = await api.post<SalesContactRow>("/api/admin/contacts", { name: newName });
+      // Mobile left blank: taken from a number in the name, e.g. "Dhruv Bhojani - Izzat (6358956693)".
+      const body = newMobile.trim() ? { name: newName, mobile: newMobile } : { name: newName };
+      const created = await api.post<SalesContactRow>("/api/admin/contacts", body);
       toast(`${created.name} added`);
       setNewName("");
+      setNewMobile("");
       load();
     } catch (err) {
       setAddError(err);
@@ -68,7 +72,8 @@ export function AdminContactsPage() {
           <h1>Executive Contacts</h1>
           <p className="muted">
             Executive / sales contact names offered on the Sales Order form. New names from uploaded POs and from saved drafts are added
-            automatically. Renaming or deleting a contact here never changes existing orders.
+            automatically. The mobile number is shown on orders so the Printing team can call the salesman. Renaming or deleting a
+            contact here never changes existing orders.
           </p>
         </div>
       </div>
@@ -78,6 +83,10 @@ export function AdminContactsPage() {
           <div className="field">
             <label htmlFor="c-new">Name</label>
             <input id="c-new" maxLength={200} placeholder="e.g. Dhruv Bhojani - Izzat (6358956693)" value={newName} onChange={(e) => setNewName(e.target.value)} />
+          </div>
+          <div className="field mobile-field">
+            <label htmlFor="c-new-mobile">Mobile</label>
+            <input id="c-new-mobile" type="tel" maxLength={20} placeholder="e.g. 98765 43210" value={newMobile} onChange={(e) => setNewMobile(e.target.value)} />
           </div>
           <button className="btn btn-primary" disabled={adding || !newName.trim()}>
             <Plus size={16} /> {adding ? "Adding…" : "Add contact"}
@@ -98,6 +107,7 @@ export function AdminContactsPage() {
                 <thead>
                   <tr>
                     <th>Name</th>
+                    <th>Mobile</th>
                     <th className="num">Orders</th>
                     <th>Added</th>
                     <th aria-label="Actions" />
@@ -110,6 +120,15 @@ export function AdminContactsPage() {
                         <Link to={`/admin/contacts/${c.id}`} className="strong-link contact-link" title={`Show the orders for ${c.name}`}>
                           {c.name}
                         </Link>
+                      </td>
+                      <td data-label="Mobile">
+                        {c.mobile ? (
+                          <a className="tel-link" href={`tel:${c.mobile.replace(/[^\d+]/g, "")}`}>
+                            <Phone size={13} /> {c.mobile}
+                          </a>
+                        ) : (
+                          <span className="muted">Not set</span>
+                        )}
                       </td>
                       <td data-label="Orders" className="num">{c.orders}</td>
                       <td data-label="Added">
@@ -142,6 +161,7 @@ export function AdminContactsPage() {
 function EditContactDialog({ contact, onClose, onDone }: { contact: SalesContactRow; onClose: () => void; onDone: () => void }) {
   const toast = useToast();
   const [name, setName] = useState(contact.name);
+  const [mobile, setMobile] = useState(contact.mobile ?? "");
   const [error, setError] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
 
@@ -150,7 +170,7 @@ function EditContactDialog({ contact, onClose, onDone }: { contact: SalesContact
     setBusy(true);
     setError(null);
     try {
-      await api.patch(`/api/admin/contacts/${contact.id}`, { name });
+      await api.patch(`/api/admin/contacts/${contact.id}`, { name, mobile });
       toast("Contact updated");
       onDone();
     } catch (err) {
@@ -176,6 +196,11 @@ function EditContactDialog({ contact, onClose, onDone }: { contact: SalesContact
           <label htmlFor="c-edit">Name</label>
           <input id="c-edit" maxLength={200} value={name} onChange={(e) => setName(e.target.value)} />
           {contact.orders > 0 && <div className="field-hint">The {contact.orders} order(s) using the old name keep it unchanged.</div>}
+        </div>
+        <div className="field">
+          <label htmlFor="c-edit-mobile">Mobile</label>
+          <input id="c-edit-mobile" type="tel" maxLength={20} placeholder="e.g. 98765 43210" value={mobile} onChange={(e) => setMobile(e.target.value)} />
+          <div className="field-hint">Shown on this salesman's orders. Leave blank to remove it.</div>
         </div>
       </form>
     </Modal>

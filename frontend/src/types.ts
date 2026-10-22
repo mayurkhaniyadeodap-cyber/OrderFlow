@@ -1,6 +1,7 @@
 export type Role = "admin" | "sales" | "printing";
 export type OrderStatus = "Draft" | "Live";
 export type PrintingStatus = "New" | "Processing" | "Print Done";
+export type PhotoStatus = "Pending" | "Confirmed" | "Rejected";
 
 export interface User {
   id: number;
@@ -31,6 +32,7 @@ export interface OrderSummary {
   is_archived: boolean;
   has_customization: boolean;
   warning_count: number;
+  photo_status: PhotoStatus | null;
 }
 
 export interface Attachment {
@@ -52,6 +54,7 @@ export interface OrderItem {
   rate: number | null;
   original_rate: number | null;
   value: number | null;
+  printing_price: number | null;
   weight: string | null;
   hsn: string | null;
   tax: string | null;
@@ -61,6 +64,11 @@ export interface OrderItem {
   logo_reference: string | null;
   notes: string | null;
   attachments?: Attachment[];
+  photo_status?: PhotoStatus | null;
+  photo_reviewed_by?: string | null;
+  photo_reviewed_at?: string | null;
+  photo_review_note?: string | null;
+  photos?: Attachment[];
 }
 
 export interface ExtractionWarning {
@@ -97,6 +105,7 @@ export interface OrderDetail extends OrderSummary {
   email: string | null;
   gstin: string | null;
   executive: string | null;
+  executive_mobile: string | null;
   subtotal: number | null;
   packaging_charges: number | null;
   processing_charges: number | null;
@@ -125,6 +134,7 @@ export interface OrderDetail extends OrderSummary {
     can_comment: boolean;
     next_printing_statuses: PrintingStatus[];
     can_upload_photos: boolean;
+    can_review_photos: boolean;
     can_delete: boolean;
     can_restore: boolean;
   };
@@ -190,9 +200,31 @@ export interface BackupInfo {
   upload_files?: number;
 }
 
+export interface PhotoReviewRow {
+  order_id: number;
+  internal_order_no: string | null;
+  po_number: string | null;
+  customer_name: string | null;
+  executive: string | null;
+  sales_user: string | null;
+  printing_status: PrintingStatus | null;
+  live_at: string | null;
+  item_id: number;
+  position: number;
+  sku: string | null;
+  quantity: number | null;
+  photo_status: PhotoStatus | null;
+  photo_count: number;
+  last_photo_at: string | null;
+  photo_reviewed_by: string | null;
+  photo_reviewed_at: string | null;
+  photo_review_note: string | null;
+}
+
 export interface SalesContactRow {
   id: number;
   name: string;
+  mobile: string | null;
   source: "extracted" | "manual" | "admin" | "backfill";
   created_by: string | null;
   created_at: string;

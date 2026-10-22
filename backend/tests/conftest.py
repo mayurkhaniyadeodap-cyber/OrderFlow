@@ -171,3 +171,23 @@ def make_live(client: TestClient, headers: dict, path: Path = REAL_PO,
     r = publish(client, headers, order)
     assert r.status_code == 200, r.text
     return r.json()
+
+
+PREVIEW_PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 64
+
+
+def approve_previews(client: TestClient, order: dict) -> dict:
+    """Printing uploads a print preview for every product and Sales confirms each one (required before Print Done).
+    Returns the order as Sales sees it afterwards."""
+    printing, sales = login(client, "printing"), login(client, "sales")
+    for item in order["items"]:
+        r = client.post(f"/api/orders/{order['id']}/photos", headers=printing, data={"item_id": str(item["id"])},
+                        files={"file": ("preview.png", PREVIEW_PNG, "image/png")})
+        assert r.status_code == 201, r.text
+    fresh = client.get(f"/api/orders/{order['id']}", headers=sales).json()
+    for item in fresh["items"]:
+        r = client.post(f"/api/orders/{order['id']}/items/{item['id']}/photo-review", headers=sales,
+                        json={"version": fresh["version"], "action": "confirm"})
+        assert r.status_code == 200, r.text
+        fresh = r.json()
+    return fresh

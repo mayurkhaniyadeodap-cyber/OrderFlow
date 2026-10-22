@@ -9,11 +9,14 @@ from typing import Any
 
 from fastapi import HTTPException, UploadFile, status
 from sqlalchemy import ColumnElement, select, true, update
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, object_session
 
 from . import contacts
 from .config import settings
 from .models import (
+    PHOTO_CONFIRMED,
+    PHOTO_PENDING,
+    PHOTO_REJECTED,
     PRINT_DONE,
     PRINT_NEW,
     PRINT_PROCESSING,
@@ -27,11 +30,12 @@ from .models import (
     OrderAttachment,
     OrderEvent,
     OrderItem,
+    OrderPhoto,
     User,
     utcnow,
 )
 from .pdf_extract import ExtractionResult
-from .schemas import GlobalUpdate, ItemSave, OrderUpdate
+from .schemas import GlobalUpdate, ItemSave, OrderUpdate, PhotoReviewRequest
 
 # Allowed printing transitions: forward one step only. Print Done is terminal.
 PRINTING_TRANSITIONS = {PRINT_NEW: (PRINT_PROCESSING,), PRINT_PROCESSING: (PRINT_DONE,), PRINT_DONE: ()}
@@ -43,8 +47,8 @@ ORDER_FIELDS = (
     "global_logo_reference", "global_notes",
 )
 ITEM_FIELDS = (
-    "sku", "product_name", "quantity", "rate", "original_rate", "value", "weight", "hsn", "tax", "location",
-    "customization_names", "customization_text", "logo_reference", "notes",
+    "sku", "product_name", "quantity", "rate", "original_rate", "value", "printing_price", "weight", "hsn", "tax",
+    "location", "customization_names", "customization_text", "logo_reference", "notes",
 )
 FIELD_LABELS = {
     "po_number": "PO number", "source_status": "source status", "source_order_date": "order date",
@@ -276,7 +280,12 @@ def update_draft(db: Session, order: Order, payload: OrderUpdate, user: User) ->
             changes.append(f"row removed ({item.sku or item.product_name or 'no SKU'})")
             for att in [a for a in order.attachments if a.item_id == item_id]:
                 order.attachments.remove(att)
+            for photo in order.photos:  # photos stay on the order, no longer linked to the removed row
+                if photo.item_id == item_id:
+                    photo.item_id = None
     order.items[:] = new_items
+    if order.status == STATUS_LIVE:
+        refresh_photo_summary(order)
     order.updated_at = utcnow()
     validate_live_edit(order)
     contacts.remember(db, order.executive, source="manual", actor=user.username)
@@ -431,6 +440,14 @@ def change_printing_status(db: Session, order: Order, user: User, new_status: st
         raise http_error(status.HTTP_409_CONFLICT,
                          f"Cannot change printing status from {current} to {new_status}. "
                          f"Allowed next step: {', '.join(allowed)}.", code="invalid_transition")
+    if new_status == PRINT_DONE:
+        waiting = [i for i in order.items if i.photo_status != PHOTO_CONFIRMED]
+        if waiting:
+            raise http_error(status.HTTP_409_CONFLICT,
+                             f"Sales has not confirmed the print preview of {len(waiting)} product(s) yet. Upload a "
+                             "preview photo for each product and wait for Sales to confirm it before Print Done.",
+                             code="previews_not_confirmed",
+                             errors=[f"{item_label(i)}: {i.photo_status or 'no preview uploaded'}" for i in waiting])
     now = utcnow()
     order.printing_status = new_status
     if new_status == PRINT_PROCESSING:
@@ -439,6 +456,90 @@ def change_printing_status(db: Session, order: Order, user: User, new_status: st
         order.print_done_at = now
     order.updated_at = now
     add_event(db, order, user, "printing_status_changed", f"{current} → {new_status}")
+
+
+# ---------------------------------------------------------------- print preview photo review (per product row)
+def item_label(item: OrderItem) -> str:
+    return f"row {item.position + 1} ({item.sku or item.product_name or 'no SKU'})"
+
+
+def find_item(order: Order, item_id: int) -> OrderItem:
+    item = next((i for i in order.items if i.id == item_id), None)
+    if item is None:
+        raise http_error(status.HTTP_404_NOT_FOUND, "Product row not found on this order. Reload the order.")
+    return item
+
+
+def photo_upload_open(order: Order) -> bool:
+    """Print previews are uploaded while the order is Live and not yet printed (New or Processing)."""
+    return order.status == STATUS_LIVE and not order.is_archived and order.printing_status in (PRINT_NEW, PRINT_PROCESSING)
+
+
+def ensure_photo_upload_allowed(order: Order, item: OrderItem) -> None:
+    if not photo_upload_open(order):
+        raise http_error(status.HTTP_409_CONFLICT,
+                         "Preview photos can be uploaded while the order is New or Processing (not after Print Done).")
+    if item.photo_status == PHOTO_CONFIRMED:
+        raise http_error(status.HTTP_409_CONFLICT, f"Sales already confirmed the preview for {item_label(item)}.",
+                         code="photos_confirmed")
+
+
+def refresh_photo_summary(order: Order) -> None:
+    """Order-level summary used by lists: Pending if any product photo waits for Sales, else Rejected if any was
+    rejected, else Confirmed once every product is confirmed; otherwise null (photos still to upload)."""
+    statuses = [i.photo_status for i in order.items]
+    if PHOTO_PENDING in statuses:
+        order.photo_status = PHOTO_PENDING
+    elif PHOTO_REJECTED in statuses:
+        order.photo_status = PHOTO_REJECTED
+    elif statuses and all(s == PHOTO_CONFIRMED for s in statuses):
+        order.photo_status = PHOTO_CONFIRMED
+    else:
+        order.photo_status = None
+
+
+def mark_photo_pending(order: Order, item: OrderItem) -> None:
+    """A new photo for a product (first one, or after a rejection) goes back to Sales for confirmation."""
+    item.photo_status = PHOTO_PENDING
+    refresh_photo_summary(order)
+    order.updated_at = utcnow()
+
+
+def can_review_photos(order: Order, user: User) -> bool:
+    """Sales (own orders) and Admin review the product preview photos of Live orders."""
+    return user.role in (ROLE_SALES, ROLE_ADMIN) and not order.is_archived and order.status == STATUS_LIVE
+
+
+def review_item_photo(db: Session, order: Order, item: OrderItem, user: User, payload: PhotoReviewRequest) -> None:
+    """Sales/Admin confirm a product's preview photo (final) or reject it with a reason."""
+    ensure_version(order, payload.version)
+    has_photo = any(p.item_id == item.id for p in order.photos)
+    if not can_review_photos(order, user) or item.photo_status != PHOTO_PENDING or not has_photo:
+        current = item.photo_status or "no photo uploaded"
+        raise http_error(status.HTTP_409_CONFLICT,
+                         f"There is no preview waiting for confirmation on {item_label(item)} ({current}).",
+                         code="photos_not_pending")
+    if payload.action == "reject" and not payload.note:
+        raise http_error(status.HTTP_422_UNPROCESSABLE_CONTENT, "Enter the reason for rejecting the preview.",
+                         errors=["A reason is required to reject the preview."])
+    now = utcnow()
+    item.photo_status = PHOTO_CONFIRMED if payload.action == "confirm" else PHOTO_REJECTED
+    item.photo_reviewed_by = user.username
+    item.photo_reviewed_at = now
+    item.photo_review_note = payload.note
+    refresh_photo_summary(order)
+    order.updated_at = now
+    if payload.action == "confirm":
+        add_event(db, order, user, "photos_confirmed",
+                  f"Preview confirmed for {item_label(item)}." + (f" Note: {payload.note}" if payload.note else ""))
+    else:
+        add_event(db, order, user, "photos_rejected", f"Preview rejected for {item_label(item)}: {payload.note}")
+
+
+def photo_dict(order: Order, p: OrderPhoto) -> dict[str, Any]:
+    return {"id": p.id, "item_id": p.item_id, "filename": p.original_filename, "content_type": p.content_type,
+            "uploaded_by": p.uploaded_by, "uploaded_at": _iso(p.uploaded_at),
+            "url": f"/api/orders/{order.id}/photos/{p.id}"}
 
 
 # ---------------------------------------------------------------- access + serialisation
@@ -507,7 +608,15 @@ def order_summary(order: Order) -> dict[str, Any]:
         "source_filename": order.source_filename, "is_archived": order.is_archived,
         "has_customization": has_global_customization(order) or any(_item_has_customization(order, i) for i in order.items),
         "warning_count": len(review_warnings(order)),
+        "photo_status": order.photo_status,
     }
+
+
+def executive_mobile(order: Order) -> str | None:
+    """Mobile number saved for the order's executive / sales contact (Admin → Executive Contacts)."""
+    db = object_session(order)
+    contact = contacts.find(db, order.executive) if db is not None and order.executive else None
+    return contact.mobile if contact else None
 
 
 def order_detail(order: Order, user: User) -> dict[str, Any]:
@@ -519,18 +628,17 @@ def order_detail(order: Order, user: User) -> dict[str, Any]:
         "created_by": order.created_by, "published_by": order.published_by,
         "processing_at": _iso(order.processing_at), "print_done_at": _iso(order.print_done_at),
         "has_source_pdf": bool(order.source_pdf_path),
+        "executive_mobile": executive_mobile(order),
         "items": [
             {"id": i.id, "position": i.position, **{k: getattr(i, k) for k in ITEM_FIELDS},
-             "attachments": [attachment_dict(order, a) for a in order.attachments if a.item_id == i.id]}
+             "attachments": [attachment_dict(order, a) for a in order.attachments if a.item_id == i.id],
+             "photo_status": i.photo_status, "photo_reviewed_by": i.photo_reviewed_by,
+             "photo_reviewed_at": _iso(i.photo_reviewed_at), "photo_review_note": i.photo_review_note,
+             "photos": [photo_dict(order, p) for p in order.photos if p.item_id == i.id]}
             for i in order.items
         ],
         "global_attachments": [attachment_dict(order, a) for a in order.attachments if a.item_id is None],
-        "photos": [
-            {"id": p.id, "filename": p.original_filename, "content_type": p.content_type,
-             "uploaded_by": p.uploaded_by, "uploaded_at": _iso(p.uploaded_at),
-             "url": f"/api/orders/{order.id}/photos/{p.id}"}
-            for p in order.photos
-        ],
+        "photos": [photo_dict(order, p) for p in order.photos],
         "comments": [
             {"id": e.id, "actor": e.actor, "actor_role": e.actor_role, "text": e.details, "created_at": _iso(e.created_at)}
             for e in order.events if e.event == "comment"
@@ -550,7 +658,8 @@ def order_detail(order: Order, user: User) -> dict[str, Any]:
             "can_restore": user.role == ROLE_ADMIN and order.is_archived,
             "next_printing_statuses": list(PRINTING_TRANSITIONS.get(order.printing_status or "", ()))
             if user.role == ROLE_PRINTING and order.status == STATUS_LIVE else [],
-            "can_upload_photos": user.role == ROLE_PRINTING and order.printing_status == PRINT_DONE,
+            "can_upload_photos": user.role == ROLE_PRINTING and photo_upload_open(order),
+            "can_review_photos": can_review_photos(order, user),
         },
     })
     return data
