@@ -617,3 +617,48 @@ def _extract_generic(model: PageModel, result: ExtractionResult) -> None:
         "gstins": sorted(set(re.findall(r"\b\d{2}[A-Z]{5}\d{4}[A-Z][0-9A-Z]Z[0-9A-Z]\b", text))),
     }
     result.meta["detected_for_reference"] = {k: v for k, v in detected.items() if v}
+
+
+# ---------------------------------------------------------------- SKU selection
+def parse_sku_list(text: str | None) -> list[str]:
+    """Comma/newline separated SKUs typed by Sales; blanks and repeats dropped, order kept."""
+    seen: dict[str, str] = {}
+    for part in re.split(r"[,\n;]+", text or ""):
+        sku = part.strip()
+        if sku and sku.lower() not in seen:
+            seen[sku.lower()] = sku
+    return list(seen.values())
+
+
+def _sku_matches(wanted: str, sku: str | None) -> bool:
+    """Exact match (case-insensitive), or the PO SKU starts with the typed code followed by a separator
+    (e.g. '6462' matches '6462_7in1_keyboard_clean_brush')."""
+    if not sku:
+        return False
+    w, s = wanted.lower(), sku.lower()
+    return s == w or (s.startswith(w) and not s[len(w)].isalnum())
+
+
+def filter_items_by_sku(result: ExtractionResult, skus: list[str]) -> None:
+    """Keep only the product rows whose SKU was requested; renumber per-row warnings and flag SKUs not found."""
+    if not skus:
+        return
+    keep = [idx for idx, item in enumerate(result.items) if any(_sku_matches(w, item.get("sku")) for w in skus)]
+    remap = {old: new for new, old in enumerate(keep)}
+    warnings = []
+    for w in result.warnings:
+        if m := re.match(r"^items\.(\d+)\.(.+)$", w["field"]):
+            old = int(m.group(1))
+            if old not in remap:
+                continue
+            w = {**w, "field": f"items.{remap[old]}.{m.group(2)}"}
+        warnings.append(w)
+    result.warnings = warnings
+    total = len(result.items)
+    result.items = [{**result.items[old], "position": new} for new, old in enumerate(keep)]
+    missing = [w for w in skus if not any(_sku_matches(w, i.get("sku")) for i in result.items)]
+    if missing:
+        result.warn("items", f"SKU(s) not found in the PO: {', '.join(missing)}. Add those rows manually if needed.")
+    result.meta["selected_skus"] = ", ".join(skus)
+    result.warn("items", f"Only the requested SKU(s) were kept: {len(result.items)} of {total} product row(s). "
+                "Order totals are still the PO's printed totals.", LEVEL_INFO)

@@ -21,6 +21,8 @@ export function UploadPage() {
   // Admin uploads belong to a Sales user chosen here (all active Sales users, including ones created later).
   const [salesUsers, setSalesUsers] = useState<AdminUser[] | null>(null);
   const [owner, setOwner] = useState("");
+  // Optional: only these SKUs (comma separated) are kept from the PO's product rows.
+  const [skus, setSkus] = useState("");
 
   useEffect(() => {
     if (!isAdmin) return;
@@ -66,6 +68,7 @@ export function UploadPage() {
     const form = new FormData();
     form.append("file", file);
     if (isAdmin) form.append("owner", owner);
+    if (skus.trim()) form.append("skus", skus.trim());
     try {
       const order = await api.upload<OrderDetail>("/api/orders/upload", form);
       toast(`Draft created from ${file.name}${isAdmin ? ` for ${owner}` : ""}`);
@@ -137,6 +140,19 @@ export function UploadPage() {
               e.target.value = "";
             }}
           />
+        </div>
+        <div className="field upload-skus">
+          <label htmlFor="upload-skus">Product SKUs</label>
+          <textarea
+            id="upload-skus"
+            rows={2}
+            value={skus}
+            onChange={(e) => setSkus(e.target.value)}
+            placeholder="e.g. 12939_3d_square_shape_creative_lamp, 6462"
+          />
+          <div className="field-hint">
+            Optional. Enter SKUs separated by commas to extract only those products from the PO. Leave empty to extract all products.
+          </div>
         </div>
         <ErrorAlert error={error} onClose={() => setError(null)} />
         <div className="form-actions">

@@ -26,7 +26,7 @@ from ..models import (
     OrderPhoto,
     User,
 )
-from ..pdf_extract import extract_po
+from ..pdf_extract import extract_po, filter_items_by_sku, parse_sku_list
 from ..schemas import (
     CommentRequest,
     GlobalUpdate,
@@ -104,6 +104,7 @@ def get_order(order_id: int, user: User = Depends(require_viewer), db: Session =
 # ---------------------------------------------------------------- upload + extraction (Sales)
 @router.post("/upload", status_code=status.HTTP_201_CREATED)
 async def upload_po(file: UploadFile = File(...), owner: str | None = Form(None, max_length=64),
+                    skus: str | None = Form(None, max_length=4000),
                     user: User = Depends(require_manager), db: Session = Depends(get_db)) -> dict:
     # Sales own their uploads; an Admin must choose the Sales user the order belongs to (`owner`).
     owner_user = svc.upload_owner(db, user, owner)
@@ -115,6 +116,8 @@ async def upload_po(file: UploadFile = File(...), owner: str | None = Form(None,
     digest = svc.sha256(data)
     relative = svc.store_file(data, "po", ".pdf")
     result = await run_in_threadpool(extract_po, settings.upload_dir / relative)
+    # Optional comma-separated SKUs: only those product rows are kept in the Draft.
+    filter_items_by_sku(result, parse_sku_list(skus))
 
     order = Order(status=STATUS_DRAFT, source_filename=filename, source_pdf_path=relative, source_sha256=digest,
                   created_by=owner_user.username)
@@ -154,6 +157,7 @@ async def re_extract(order_id: int, body: VersionBody, user: User = Depends(requ
     svc.ensure_version(order, body.version)
     path = svc.resolve_upload(order.source_pdf_path)
     result = await run_in_threadpool(extract_po, path)
+    filter_items_by_sku(result, parse_sku_list((order.source_meta or {}).get("selected_skus")))
     for att in [a for a in order.attachments if a.item_id is not None]:
         order.attachments.remove(att)
     svc.apply_extraction(order, result)
