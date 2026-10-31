@@ -1,9 +1,9 @@
-import { Inbox, X } from "lucide-react";
+import { Inbox, X } from "../../components/icons";
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
-import { OrdersTable } from "../../components/OrdersTable";
+import { OrdersContent, QuickFilters, useOrdersView, ViewSwitch } from "../../components/OrdersViews";
 import { EmptyState, ErrorAlert, Section, Spinner } from "../../components/ui";
 import type { OrderSummary } from "../../types";
 
@@ -16,6 +16,7 @@ export function AdminOrdersPage() {
   const [data, setData] = useState<{ total: number; items: OrderSummary[] } | null>(null);
   const [error, setError] = useState<unknown>(null);
   const [loading, setLoading] = useState(false);
+  const [view, setView] = useOrdersView();
   const get = (k: string) => params.get(k) ?? "";
   const offset = Number(get("offset")) || 0;
   const [qText, setQText] = useState(get("q"));
@@ -49,6 +50,15 @@ export function AdminOrdersPage() {
     next.delete("offset");
     setParams(next, { replace: true });
   };
+  const quickFilter = (status: string, printing: string) => {
+    const next = new URLSearchParams(params);
+    for (const [key, value] of [["status", status], ["printing_status", printing]]) {
+      if (value) next.set(key, value);
+      else next.delete(key);
+    }
+    next.delete("offset");
+    setParams(next, { replace: true });
+  };
   const filtered = ["q", "status", "printing_status", "date_from", "date_to"].some((k) => params.get(k));
 
   return (
@@ -58,7 +68,9 @@ export function AdminOrdersPage() {
           <h1>All Orders</h1>
           <p className="muted">Every order in the portal. Admin view is read-only; Sales and Printing keep their workflows.</p>
         </div>
+        <ViewSwitch view={view} onChange={setView} />
       </div>
+      <QuickFilters status={get("status")} printing={get("printing_status")} showDrafts onPick={quickFilter} />
       <Section title="Filters" className="filters-card">
         <form
           className="filters admin-order-filters"
@@ -123,7 +135,7 @@ export function AdminOrdersPage() {
             <EmptyState icon={<Inbox size={28} />} title={filtered ? "No orders match these filters" : "No orders yet"} />
           ) : (
             <>
-              <OrdersTable orders={data.items} role="admin" />
+              <OrdersContent view={view} orders={data.items} role="admin" />
               {data.total > PAGE && (
                 <div className="pager">
                   <button className="btn btn-sm btn-secondary" disabled={offset === 0} onClick={() => set("offset", String(Math.max(0, offset - PAGE)))}>Previous</button>

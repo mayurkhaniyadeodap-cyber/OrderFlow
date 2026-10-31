@@ -1,4 +1,4 @@
-import { DatabaseBackup, Download, Save, Settings } from "lucide-react";
+import { DatabaseBackup, Download, Save, Settings } from "../../components/icons";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { api, downloadFile } from "../../api";
 import { useAuth } from "../../auth";

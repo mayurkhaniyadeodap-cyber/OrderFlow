@@ -1,4 +1,4 @@
-import { AlertCircle, AlertTriangle, CheckCircle2, Eye, EyeOff, Info, Loader2, X } from "lucide-react";
+import { AlertCircle, AlertTriangle, CheckCircle2, Eye, EyeOff, Info, Loader2, X } from "./icons";
 import { useEffect, useRef, useState, type InputHTMLAttributes, type ReactNode } from "react";
 import type { OrderStatus, PhotoStatus, PrintingStatus } from "../types";
 
@@ -14,6 +14,18 @@ const PHOTO_LABELS: Record<PhotoStatus, string> = { Pending: "Waiting for confir
 export function PhotoPill({ status }: { status: PhotoStatus | null | undefined }) {
   if (!status) return <span className="pill pill-photo-missing">No preview yet</span>;
   return <span className={`pill pill-photo-${status.toLowerCase()}`}>{PHOTO_LABELS[status]}</span>;
+}
+
+/** Decorative wave lines behind the welcome banner and the login page. */
+export function Wave() {
+  return (
+    <svg className="wave" viewBox="0 0 900 200" preserveAspectRatio="xMaxYMid slice" fill="none" aria-hidden="true">
+      {[0, 1, 2, 3, 4, 5, 6].map((i) => (
+        <path key={i} d={`M${300 + i * 14} ${215 - i * 3} C ${470 + i * 8} ${150 - i * 12}, ${600 + i * 6} ${235 - i * 14}, 920 ${58 + i * 17}`}
+          stroke="currentColor" strokeOpacity={0.34 - i * 0.04} strokeWidth={1.5} />
+      ))}
+    </svg>
+  );
 }
 
 export function Spinner({ label = "Loading…" }: { label?: string }) {

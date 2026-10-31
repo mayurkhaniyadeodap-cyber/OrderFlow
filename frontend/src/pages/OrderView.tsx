@@ -1,4 +1,4 @@
-import { CheckCircle2, FileText, Globe2, Lock, Package, Phone, PlayCircle, Printer, Trash2, Truck, User as UserIcon } from "lucide-react";
+import { CheckCircle2, FileText, Globe2, Lock, Package, Phone, PlayCircle, Printer, Trash2, Truck, User as UserIcon } from "../components/icons";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { api, openFile } from "../api";

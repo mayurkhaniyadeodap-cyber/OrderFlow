@@ -1,10 +1,11 @@
-import { AlertTriangle, Camera, ChevronRight, Sparkles } from "lucide-react";
+import { AlertTriangle, Camera, ChevronRight, Sparkles } from "./icons";
 import { Link } from "react-router-dom";
 import { fmtDateTime, fmtMoney } from "../format";
 import type { OrderSummary, Role } from "../types";
 import { StatusPill } from "./ui";
 
-export function OrdersTable({ orders, role }: { orders: OrderSummary[]; role: Role }) {
+/** `compact` drops the PO and date columns for narrow dashboard cards. */
+export function OrdersTable({ orders, role, compact = false }: { orders: OrderSummary[]; role: Role; compact?: boolean }) {
   const sales = role !== "printing"; // Sales and Admin see status and totals
   return (
     <div className="table-wrap">
@@ -12,9 +13,9 @@ export function OrdersTable({ orders, role }: { orders: OrderSummary[]; role: Ro
         <thead>
           <tr>
             <th>Order no.</th>
-            <th>Source PO</th>
+            {!compact && <th>Source PO</th>}
             <th>Customer</th>
-            <th>{sales ? "Updated / Live" : "Live date"}</th>
+            {!compact && <th>{sales ? "Updated / Live" : "Live date"}</th>}
             {sales && <th>Status</th>}
             <th>Printing</th>
             <th className="num">Items / Qty</th>
@@ -30,7 +31,7 @@ export function OrdersTable({ orders, role }: { orders: OrderSummary[]; role: Ro
                   {o.internal_order_no ?? <span className="muted">Draft #{o.id}</span>}
                 </Link>
               </td>
-              <td data-label="Source PO" className="nowrap">{o.po_number ?? <span className="muted">—</span>}</td>
+              {!compact && <td data-label="Source PO" className="nowrap">{o.po_number ?? <span className="muted">—</span>}</td>}
               <td data-label="Customer">
                 <div className="cell-main">{o.customer_name ?? <span className="muted">Not set</span>}</div>
                 {sales && o.status === "Draft" && (
@@ -62,9 +63,11 @@ export function OrdersTable({ orders, role }: { orders: OrderSummary[]; role: Ro
                   </div>
                 )}
               </td>
-              <td data-label={sales ? "Updated / Live" : "Live date"}>
-                {o.live_at ? <span className="nowrap">{fmtDateTime(o.live_at)}</span> : <span className="muted">{fmtDateTime(o.updated_at)}</span>}
-              </td>
+              {!compact && (
+                <td data-label={sales ? "Updated / Live" : "Live date"}>
+                  {o.live_at ? <span className="nowrap">{fmtDateTime(o.live_at)}</span> : <span className="muted">{fmtDateTime(o.updated_at)}</span>}
+                </td>
+              )}
               {sales && (
                 <td data-label="Status">
                   <StatusPill status={o.status} />

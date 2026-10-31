@@ -1,4 +1,4 @@
-import { ArrowLeft, Printer } from "lucide-react";
+import { ArrowLeft, Printer } from "../components/icons";
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api } from "../api";

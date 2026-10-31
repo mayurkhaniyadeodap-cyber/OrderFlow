@@ -33,6 +33,14 @@ export function fmtMoney(value: number | null | undefined): string {
   return value === null || value === undefined ? "—" : `₹${money.format(value)}`;
 }
 
+const dayMonth = new Intl.DateTimeFormat("en-IN", { day: "2-digit", month: "short" });
+
+/** Chart label for a "YYYY-MM-DD" local day. Built from the parts so the time zone cannot shift it a day. */
+export function fmtDay(value: string): string {
+  const [y, m, d] = value.split("-").map(Number);
+  return dayMonth.format(new Date(y, m - 1, d));
+}
+
 export function fmtNumber(value: number | null | undefined): string {
   return value === null || value === undefined ? "—" : money.format(value);
 }

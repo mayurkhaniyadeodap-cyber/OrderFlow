@@ -1,4 +1,4 @@
-import { History, MessageSquare, Send } from "lucide-react";
+import { History, MessageSquare, Send } from "./icons";
 import { useState, type FormEvent } from "react";
 import { api } from "../api";
 import { EVENT_LABELS, fmtDateTime } from "../format";

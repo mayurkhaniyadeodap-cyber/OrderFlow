@@ -1,4 +1,4 @@
-import { Camera, CheckCircle2, XCircle } from "lucide-react";
+import { Camera, CheckCircle2, XCircle } from "./icons";
 import { useRef, useState } from "react";
 import { api } from "../api";
 import { useAuth } from "../auth";

@@ -1,4 +1,4 @@
-import { KeyRound, Pencil, Power, UserPlus } from "lucide-react";
+import { KeyRound, Pencil, Power, UserPlus } from "../../components/icons";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { api } from "../../api";
 import { useAuth } from "../../auth";

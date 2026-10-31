@@ -153,6 +153,22 @@ export interface DashboardData {
   recent: OrderSummary[];
 }
 
+export interface AttentionData {
+  count: number;
+  items: OrderSummary[];
+}
+
+/** Dashboard charts. Customer totals and the pipeline are absent for Printing; executives are Admin only. */
+export interface Insights {
+  role: Role;
+  days: number;
+  trend: { date: string; created: number; published: number; finished: number }[];
+  job_ages: { label: string; count: number }[];
+  top_customers?: { name: string; total: number }[];
+  pipeline?: { uploaded: number; published: number; processing: number; print_done: number };
+  executives?: { name: string; orders: number }[];
+}
+
 // ---------------------------------------------------------------- Admin panel
 export interface AdminUser {
   id: number;

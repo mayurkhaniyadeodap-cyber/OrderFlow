@@ -1,8 +1,8 @@
-import { LogIn } from "lucide-react";
+import { FileText, LogIn } from "../components/icons";
 import { useState, type FormEvent } from "react";
 import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "../auth";
-import { Alert, ErrorAlert, PasswordInput } from "../components/ui";
+import { Alert, ErrorAlert, PasswordInput, Wave } from "../components/ui";
 import type { Role } from "../types";
 
 const SALES_ONLY = /^\/(orders\/?(\?.*)?$|upload)/;
@@ -48,13 +48,26 @@ export function LoginPage() {
 
   return (
     <div className="login-page">
-      <div className="login-card">
+      <div className="login-hero">
+        <Wave />
         <div className="login-brand">
-          <div className="brand-mark lg">OF</div>
-          <div>
-            <h1>OrderFlow</h1>
-            <p className="muted">Order Management Portal · Sales &amp; Printing</p>
-          </div>
+          <span className="brand-mark"><FileText size={22} /></span>
+          OrderFlow
+        </div>
+        <div>
+          <p className="login-title">From purchase order to printed product.</p>
+          <p className="login-tagline">One place for Sales and Printing to move every order forward.</p>
+        </div>
+        <ol className="login-steps">
+          <li>Upload the PO PDF</li>
+          <li>Review and publish Live</li>
+          <li>Print, preview and finish</li>
+        </ol>
+      </div>
+      <div className="login-card">
+        <div>
+          <h1>Sign in</h1>
+          <p className="muted">Order Management Portal · Sales &amp; Printing</p>
         </div>
         {notice && (
           <Alert tone={notice.includes("signed out") ? "info" : "warning"} onClose={clearNotice}>

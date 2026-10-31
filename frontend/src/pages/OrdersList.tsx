@@ -1,9 +1,9 @@
-import { Inbox, Upload, X } from "lucide-react";
+import { Inbox, X } from "../components/icons";
 import { useEffect, useMemo, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
-import { OrdersTable } from "../components/OrdersTable";
+import { OrdersContent, QuickFilters, useOrdersView, ViewSwitch } from "../components/OrdersViews";
 import { EmptyState, ErrorAlert, Section, Spinner } from "../components/ui";
 import type { OrderSummary } from "../types";
 
@@ -16,6 +16,7 @@ export function OrdersListPage({ mode }: { mode: "sales" | "printing" }) {
   const [data, setData] = useState<{ total: number; items: OrderSummary[] } | null>(null);
   const [error, setError] = useState<unknown>(null);
   const [loading, setLoading] = useState(false);
+  const [view, setView] = useOrdersView();
 
   const q = params.get("q") ?? "";
   const status = params.get("status") ?? "";
@@ -57,6 +58,15 @@ export function OrdersListPage({ mode }: { mode: "sales" | "printing" }) {
     next.delete("offset");
     setParams(next, { replace: true });
   };
+  const quickFilter = (nextStatus: string, nextPrinting: string) => {
+    const next = new URLSearchParams(params);
+    for (const [key, value] of [["status", nextStatus], ["printing_status", nextPrinting]]) {
+      if (value) next.set(key, value);
+      else next.delete(key);
+    }
+    next.delete("offset");
+    setParams(next, { replace: true });
+  };
   const filtersActive = Boolean(q || status || printing);
 
   return (
@@ -70,12 +80,10 @@ export function OrdersListPage({ mode }: { mode: "sales" | "printing" }) {
               : "Live orders only, oldest Live date first so older jobs are not missed."}
           </p>
         </div>
-        {mode === "sales" && (
-          <Link to="/upload" className="btn btn-primary">
-            <Upload size={16} /> Upload PO
-          </Link>
-        )}
+        <ViewSwitch view={view} onChange={setView} />
       </div>
+
+      <QuickFilters status={status} printing={printing} showDrafts={mode === "sales"} onPick={quickFilter} />
 
       <Section title="Filters" className="filters-card">
         <form
@@ -144,7 +152,7 @@ export function OrdersListPage({ mode }: { mode: "sales" | "printing" }) {
             </EmptyState>
           ) : (
             <>
-              <OrdersTable orders={data.items} role={mode} />
+              <OrdersContent view={view} orders={data.items} role={mode} />
               {data.total > PAGE && (
                 <div className="pager">
                   <button className="btn btn-sm btn-secondary" disabled={offset === 0} onClick={() => update("offset", String(Math.max(0, offset - PAGE)))}>

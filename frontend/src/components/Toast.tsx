@@ -1,4 +1,4 @@
-import { CheckCircle2, AlertCircle } from "lucide-react";
+import { CheckCircle2, AlertCircle } from "./icons";
 import { createContext, useCallback, useContext, useState, type ReactNode } from "react";
 
 interface ToastItem {

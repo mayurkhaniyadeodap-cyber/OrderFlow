@@ -1,4 +1,4 @@
-import { ArrowLeft, ClipboardList, Inbox } from "lucide-react";
+import { ArrowLeft, ClipboardList, Inbox } from "../../components/icons";
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api, ApiError } from "../../api";

@@ -1,4 +1,4 @@
-import { ArchiveRestore, Trash2 } from "lucide-react";
+import { ArchiveRestore, Trash2 } from "./icons";
 import { useState } from "react";
 import { api } from "../api";
 import type { OrderDetail } from "../types";

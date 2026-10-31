@@ -1,4 +1,4 @@
-import { FileText, Paperclip, Trash2 } from "lucide-react";
+import { FileText, Paperclip, Trash2 } from "./icons";
 import { useEffect, useState } from "react";
 import { api, openFile } from "../api";
 import type { Attachment } from "../types";

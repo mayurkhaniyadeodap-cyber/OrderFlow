@@ -1,4 +1,4 @@
-import { Contact, Pencil, Phone, Plus, Trash2 } from "lucide-react";
+import { Contact, Pencil, Phone, Plus, Trash2 } from "../../components/icons";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../../api";

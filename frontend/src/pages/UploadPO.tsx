@@ -1,4 +1,4 @@
-import { FileUp, FileText, UploadCloud } from "lucide-react";
+import { FileUp, FileText, UploadCloud } from "../components/icons";
 import { useEffect, useRef, useState, type DragEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../api";

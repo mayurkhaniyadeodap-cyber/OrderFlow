@@ -1,4 +1,4 @@
-import { History, X } from "lucide-react";
+import { History, X } from "../../components/icons";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../../api";

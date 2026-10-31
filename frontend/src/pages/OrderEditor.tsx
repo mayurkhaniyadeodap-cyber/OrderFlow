@@ -13,7 +13,7 @@ import {
   Sparkles,
   Trash2,
   User as UserIcon,
-} from "lucide-react";
+} from "../components/icons";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useBlocker, useNavigate } from "react-router-dom";
 import { api, ApiError, openFile } from "../api";
@@ -327,7 +327,15 @@ export function OrderEditor({ order, setOrder }: { order: OrderDetail; setOrder:
           printing status do not change, the order must still meet the publish rules, and every change is recorded in the activity log.
         </Alert>
       ) : (
-        <ExtractionPanel order={order} reviewCount={reviewCount} onReextract={() => setConfirm("reextract")} />
+        <>
+          <ExtractionPanel order={order} reviewCount={reviewCount} onReextract={() => setConfirm("reextract")} />
+          <PublishChecklist steps={[
+            { label: "Customer details added", done: Boolean(form.customer_name.trim()) },
+            { label: "Product rows added", done: form.items.length > 0 },
+            { label: "Customization added", done: order.has_customization || globalHasCustomization },
+            { label: reviewCount ? `${reviewCount} extracted value${reviewCount === 1 ? "" : "s"} to check` : "Extracted values checked", done: reviewCount === 0 },
+          ]} />
+        </>
       )}
 
       <Section title="Customer & PO" icon={<UserIcon size={18} />}>
@@ -493,6 +501,20 @@ function Field({ label, id, required, warnings, error, hint, children }: {
       ))}
       {hint && !error && <div className="field-hint">{hint}</div>}
     </div>
+  );
+}
+
+/** At-a-glance progress on a draft. The server still makes the final check when Publish Live is pressed. */
+function PublishChecklist({ steps }: { steps: { label: string; done: boolean }[] }) {
+  return (
+    <ul className="checklist" aria-label="Publish checklist">
+      {steps.map((s) => (
+        <li key={s.label} className={s.done ? "done" : ""}>
+          {s.done ? <CheckCircle2 size={16} aria-hidden /> : <AlertTriangle size={16} aria-hidden />}
+          {s.label}
+        </li>
+      ))}
+    </ul>
   );
 }
 

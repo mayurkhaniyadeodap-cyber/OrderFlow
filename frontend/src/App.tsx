@@ -1,4 +1,4 @@
-import { ShieldOff } from "lucide-react";
+import { ShieldOff } from "./components/icons";
 import type { ReactNode } from "react";
 import { createBrowserRouter, Link, Navigate, Outlet, RouterProvider, useLocation, type RouteObject } from "react-router-dom";
 import { AuthProvider, useAuth } from "./auth";
