@@ -493,10 +493,6 @@ h2 { font-weight: 700; }
 .topbar-actions { gap: 4px; }
 .top-btn { position: relative; width: 42px; height: 42px; display: grid; place-items: center; border: 1px solid transparent; border-radius: var(--radius-sm); background: none; color: var(--text-2); cursor: pointer; }
 .top-btn:hover { background: var(--surface); border-color: var(--border); }
-.bell { position: relative; }
-.bell-count { position: absolute; top: 3px; right: 3px; min-width: 17px; height: 17px; padding: 0 4px; border-radius: 99px; background: #d92d2d; color: #fff; font-size: 10.5px; font-weight: 700; line-height: 17px; text-align: center; }
-.bell-panel { position: absolute; right: 0; top: 48px; width: 340px; max-width: calc(100vw - 32px); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-lg); overflow: hidden; z-index: 50; }
-.bell-panel h2 { font-size: 14px; padding: 13px 16px; border-bottom: 1px solid var(--border); }
 .user-pill { display: inline-flex; align-items: center; gap: 8px; margin-left: 6px; padding: 4px 11px 4px 4px; border-radius: 99px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font: inherit; font-weight: 600; font-size: 13px; cursor: pointer; }
 .user-pill:hover { border-color: var(--border-strong); }
 .content { padding: 26px 28px; }

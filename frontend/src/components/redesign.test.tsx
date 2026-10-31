@@ -121,12 +121,10 @@ describe("app shell", () => {
     expect(screen.getByRole("button", { name: "Switch to light mode" })).toBeInTheDocument();
   });
 
-  it("shows waiting orders in the notification bell", async () => {
+  it("has no notification bell, and still lists waiting orders on the dashboard", async () => {
     open("sales", { count: 1, items: [makeOrder({ id: 9, customer_name: "Sample Traders", status: "Draft", warning_count: 2 })] });
-    await userEvent.click(await screen.findByRole("button", { name: "Notifications, 1 waiting" }));
-    const panel = document.querySelector(".bell-panel") as HTMLElement;
-    expect(within(panel).getByText(/Sample Traders/)).toBeInTheDocument();
-    expect(within(panel).getByText("2 to review")).toBeInTheDocument();
+    expect(await screen.findByText("2 to review")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Notifications/ })).not.toBeInTheDocument();
   });
 
   it("keeps the dashboard working when the charts cannot load", async () => {

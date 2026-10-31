@@ -1,10 +1,8 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth";
 import { useTheme } from "../theme";
-import { AttentionList, useAttention } from "./DashboardParts";
 import {
-  Bell,
   Camera,
   ClipboardList,
   Contact,
@@ -29,22 +27,10 @@ export function Layout() {
   const navigate = useNavigate();
   const location = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
-  const [bellOpen, setBellOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [theme, toggleTheme] = useTheme();
-  const attention = useAttention();
-  const bell = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    setMenuOpen(false);
-    setBellOpen(false);
-  }, [location.pathname]);
-  useEffect(() => {
-    if (!bellOpen) return;
-    const close = (e: MouseEvent) => bell.current?.contains(e.target as Node) || setBellOpen(false);
-    document.addEventListener("mousedown", close);
-    return () => document.removeEventListener("mousedown", close);
-  }, [bellOpen]);
+  useEffect(() => setMenuOpen(false), [location.pathname]);
   if (!user) return null;
 
   const isSales = user.role === "sales";
@@ -133,19 +119,6 @@ export function Layout() {
             <button className="top-btn" onClick={toggleTheme} aria-label={`Switch to ${nextTheme} mode`} title={`Switch to ${nextTheme} mode`}>
               {theme === "dark" ? <Sun size={21} /> : <Moon size={21} />}
             </button>
-            <div className="bell" ref={bell}>
-              <button className="top-btn" onClick={() => setBellOpen((o) => !o)} aria-expanded={bellOpen}
-                aria-label={attention?.count ? `Notifications, ${attention.count} waiting` : "Notifications"}>
-                <Bell size={21} />
-                {!!attention?.count && <span className="bell-count">{attention.count}</span>}
-              </button>
-              {bellOpen && (
-                <div className="bell-panel">
-                  <h2>Needs your action</h2>
-                  <AttentionList items={attention?.items ?? []} role={user.role} onPick={() => setBellOpen(false)} />
-                </div>
-              )}
-            </div>
             <button className="top-btn" onClick={refresh} title="Refresh data" aria-label="Refresh data">
               <RefreshCw size={19} />
             </button>

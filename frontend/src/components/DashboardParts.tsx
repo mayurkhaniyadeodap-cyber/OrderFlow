@@ -34,7 +34,7 @@ export function useInsights() {
   return { days, setDays, data, failed };
 }
 
-/** The orders waiting on this user, for the notification bell and the dashboard list. */
+/** The orders waiting on this user, for the dashboard list. */
 export function useAttention() {
   const { user, refreshKey } = useAuth();
   const [data, setData] = useState<AttentionData | null>(null);
@@ -64,14 +64,14 @@ function attentionNote(o: OrderSummary, role: Role): { text: string; tone: strin
   return { text: "Print preview to confirm", tone: "tone-new", icon: <Camera size={18} /> };
 }
 
-export function AttentionList({ items, role, onPick }: { items: OrderSummary[]; role: Role; onPick?: () => void }) {
+function AttentionList({ items, role }: { items: OrderSummary[]; role: Role }) {
   if (!items.length) return <p className="attention-empty muted">Nothing is waiting on you.</p>;
   return (
     <div className="attention">
       {items.map((o) => {
         const note = attentionNote(o, role);
         return (
-          <Link key={o.id} to={`/orders/${o.id}`} className={note.tone} onClick={onPick}>
+          <Link key={o.id} to={`/orders/${o.id}`} className={note.tone}>
             <span className="round-icon">{note.icon}</span>
             <span className="attention-text">
               <b>{o.internal_order_no ?? `Draft #${o.id}`} · {o.customer_name ?? "Not set"}</b>

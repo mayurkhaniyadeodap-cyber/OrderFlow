@@ -7,7 +7,6 @@ import {
   ArrowsClockwise,
   ArrowUUpLeft,
   Archive as PhArchive,
-  Bell as PhBell,
   Broadcast,
   Calculator as PhCalculator,
   CalendarBlank,
@@ -87,7 +86,6 @@ export const Archive = duo(PhArchive);
 export const ArchiveRestore = duo(ArrowUUpLeft);
 export const ArrowLeft = line(PhArrowLeft);
 export const ArrowRight = line(PhArrowRight);
-export const Bell = duo(PhBell);
 export const Calculator = duo(PhCalculator);
 export const Calendar = duo(CalendarBlank);
 export const Camera = duo(PhCamera);
